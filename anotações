@@ -1,0 +1,23 @@
+Considerações sobre a função propagar_local
+
+Sim, a fila pode aumentar o custo por nó quando a propagação não gera muita poda — é o clássico trade-off de forward checking/arc-consistency: mais trabalho local por decisão vs. menos nós explorados, e nem sempre compensa em todas as instâncias. Em termos gerais, técnicas de propagação mais fortes (MAC/AC-3 com fila) reduzem melhor os domínios, mas têm overhead maior; em muitos problemas práticos, uma forma leve de forward checking vence, enquanto AC completa só compensa quando as restrições são “apertadas” e a poda resultante é alta.[1][2][3][4]
+
+### Por que ficou mais lento
+- A propagar_local percorre uma BFS curta que pode visitar múltiplos vizinhos e reavaliar restrições após cada atribuição; se o grafo é denso e a poda extra é rara, o custo O(grau) adicional por nó vira gargalo e o total de nós não cai o suficiente para compensar.[5][6]
+- Em termos de CSP, você saiu de um forward checking minimalista (checar só o vértice e vizinhos imediatos) para algo mais próximo de “manter consistência local” com fila; isso é análogo a ir de FC para MAC-light, com custo adicional por nó.[7][8]
+
+### Como manter os ganhos sem o custo extra
+- Use apenas checar_vizinhos_afetados (sem BFS) logo após atualizar_contadores, que é O(grau(v)) e suficiente para podar violações diretas; evite propagar além de N(v) por padrão.[2][8]
+- Ative a fila somente sob gatilhos baratos, por exemplo:
+  - Se contador_vizinhos[vertice][-1]==0 (todos vizinhos já fixados), pois efeitos em cadeia são mais prováveis;
+  - Se valor_guarnicao==0 e muitos vizinhos 0 dependem de poucos 2 restantes (proxy: muitos vizinhos com contador 2 baixo);
+  - Se o bound estiver perto do melhor_peso e a poda extra pode evitar explorar subárvores grandes. Esses gatilhos limitam chamadas custosas a casos onde a chance de poda é maior.[5][7]
+- Impor um limite de expansão na fila (por exemplo, máximo de K nós da BFS) para tornar o custo previsível; se exceder K, devolva True e pare a propagação, tratando como cheque leve.[5]
+- Memorizar/evitar rechecagens: mantenha um carimbo de “versão” por vértice e só reavalie um u se algum contador de u mudou desde a última checagem, reduzindo repetições em grafos densos.[3][9]
+
+### Alternativas de baixo custo com bom impacto
+- Fortalecer o bound barato ao invés de propagar: adicionar termos como Z = número de vértices 0 já fixados sem vizinho 2 garantido (cada um exigirá pelo menos um “2”), de modo que LB = soma_atribuida + Z, costuma dar muita poda com custo O(n+m) ocasional, sem fila por decisão.[6][10]
+- Melhorar a ordem de branching: escolher próximo vértice pelo maior “déficit” e testar valores na ordem {2,1,0} encontra incumbentes menores mais cedo e aumenta poda por peso, sem custo de fila.[10][8]
+
+Em resumo, a fila é útil quando a instância é muito restrita e a propagação detecta inconsistências em cadeia; caso contrário, o overhead domina e o tempo sobe, exatamente o que você observou. Para o seu caso, mantenha a checagem local de vizinhos imediatos e torne a propagação com fila opcional e acionada por gatilhos específicos ou limite de passos K para equilibrar custo e poda.[4][1][2][5]
+
