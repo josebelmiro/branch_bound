@@ -1,8 +1,10 @@
 import matplotlib.pyplot as plt
+import networkx as nx
+
 """
     Plota um grafo com o valor dos vértices e guarnições
 """
-def plotar_grafo(grafo, atribuicoes, filename="grafo.png"):
+def plotar_grafo(grafo, atribuicoes, filename=r"imagens\grafo.png"):
     G = nx.Graph()
     n = len(grafo)
     G.add_nodes_from(range(n))

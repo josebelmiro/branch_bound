@@ -1,16 +1,20 @@
 import time
 from heuristicas import heuristica_limite_inferior, heuristica_v2
-from podas import atribuicao_parcial_v2, positivo_tem_par_possivel, checar_positivos_isolados_reforcado, \
-    checar_vizinhos_afetados, checagens_incrementais_basicas, unico_fornecedor_de_dois, propagar_local, \
-    atribuicao_parcial_v1, atribuicao_completa
 from plotar import plotar_grafo
+from podas import atribuicao_parcial, checar_positivos_isolados, checar_vizinhos_afetados, \
+        unico_fornecedor_de_dois, propagar_local, atribuicao_completa
 from matriz import leitura_matriz_adjacencia
+
+# Importação para vetores com mais de 1000 posições
+import sys
+sys.setrecursionlimit(1200)
 
 """
     Função para inicializar as operações
     Separada por fins pedagógicos
 """
 def calcular(grafo):
+
     # Calcula o tempo de execução
     inicio = time.perf_counter()
 
@@ -25,7 +29,7 @@ def calcular(grafo):
 
     # Calcula o tempo de execução
     fim = time.perf_counter()
-    print(f"Tempo de execução: {fim - inicio} segundos")
+    print("Tempo de execução: %.2f segundos"% (fim - inicio))
 
 """
     Inicialização da função de dominação romana total
@@ -163,7 +167,7 @@ def branch_bound(grafo, atribuicoes, vertice, melhor_solucao, melhor_peso, logfi
             continue
 
         # 2) Checagem local do próprio vértice (regra parcial TRD)
-        if not atribuicao_parcial_v2(contador_vizinhos, vertice, valor_guarnicao):
+        if not atribuicao_parcial(contador_vizinhos, vertice, valor_guarnicao):
             #logfile.write(f"Poda por atribuição parcial inválida no vértice {vertice} com valor {valor_guarnicao}\n")
 
             # nova estratégia para verificar valores antigos
@@ -177,67 +181,36 @@ def branch_bound(grafo, atribuicoes, vertice, melhor_solucao, melhor_peso, logfi
             atribuicoes[vertice] = valor_antigo
             continue
 
-        # 4) Regra de poda por par impossível para positivos (reforçada)
-        if not checar_positivos_isolados_reforcado(grafo, atribuicoes, contador_vizinhos, vertice):
+        # 4) Único fornecedor de 2
+        if not unico_fornecedor_de_dois(contador_vizinhos, grafo, vertice, atribuicoes):
             atualizar_contadores(contador_vizinhos, grafo, vertice, valor_guarnicao, valor_antigo)
             atribuicoes[vertice] = valor_antigo
             continue
 
-        """
-        # Regras adicionais para poda mais agressiva
-        # Aumentam consideravelmente o tempo de execução
-        # johnson16-2-4.mtx # 120*120 com 5460 posições
-        #   Ainda não conseguiram executar abaixo de 10 minutos (ainda nem sei quanto tempo leva)
-        
-        # Função nova (05.11.25): aumentou significativamente o custo de processamento
-        # 4) Propagação leve (opcional): BFS rasa para capturar efeitos em cadeia baratos
-        if not propagar_local(contador_vizinhos, grafo, [vertice], atribuicoes):
-            atualizar_contadores(contador_vizinhos, grafo, vertice, valor_guarnicao, valor_antigo)
-            atribuicoes[vertice] = valor_antigo
-            continue
-            
-        # Regras A e B incrementais
-        if not checagens_incrementais_basicas(contador_vizinhos, grafo, atribuicoes, vertice):
-            atribuicoes[vertice] = valor_antigo
-            continue
-
-        ok, unico = unico_fornecedor_de_dois(contador_vizinhos, grafo, atribuicoes, vertice)
-        if not ok:
-            # poda
+        # 5) Regra de poda por par impossível para positivos (reforçada)
+        if not checar_positivos_isolados(grafo, atribuicoes, contador_vizinhos, vertice):
             atualizar_contadores(contador_vizinhos, grafo, vertice, valor_guarnicao, valor_antigo)
             atribuicoes[vertice] = valor_antigo
             continue
 
-        # Política leve: não force atribuição; apenas use como restrição de valor:
-        # Se estamos escolhendo valor para 'v' e v é o único fornecedor de 2 para algum w,
-        # então só permita valor==2; caso contrário, podar esse valor.
-        if unico is not None and vertice == unico and valor_guarnicao != 2:
+        # 6) Propagação em k níveis
+        # k = 0, não executa
+        # k = 1, já é executado em checar_vizinhos_afetados
+        if not propagar_local(contador_vizinhos, grafo, [vertice], atribuicoes, 0):
             atualizar_contadores(contador_vizinhos, grafo, vertice, valor_guarnicao, valor_antigo)
             atribuicoes[vertice] = valor_antigo
             continue
-        # Regras adicionais para poda a fim de aumentar a agressividade
-        # Aumentou o tempo de execução
-        """
 
         branch_bound(grafo, atribuicoes, vertice + 1, melhor_solucao, melhor_peso, logfile, contador_vizinhos)
 
-        # nova estratégia para verificar valores antigos
         atualizar_contadores(contador_vizinhos, grafo, vertice, valor_guarnicao, valor_antigo)
         atribuicoes[vertice] = valor_antigo
 
-arquivo = r"matrizes\johnson8-2-4.mtx" # 28*28 com 210 posições - < 2s h1 e < 6s h2
-#arquivo = r"matrizes\johnson8-4-4.mtx" # 70*70 com 1855 posições - < 4s h1 e < 246s h2
-#arquivo = r"matrizes\johnson16-2-4.mtx" # 120*120 com 5460 posições - mais que 15 minutos (não esperei) h1 e mais que 20 minutos (não esperei) h2
+#arquivo = r"matrizes\johnson8-2-4.mtx" # 28*28 com 210 posições - mínimo 6
+#arquivo = r"matrizes\johnson8-4-4.mtx" # 45*45 com 918 posições - mínimo 4
+arquivo = r"matrizes\johnson8-4-4.mtx" # 70*70 com 1855 posições - mínimo 4
+#arquivo = r"matrizes\c-fat200-2.mtx"  # 200*200 com 3235 posições - mínimo ? - passou mais de 1 hora e não terminou
+#arquivo = r"matrizes\johnson16-2-4.mtx" # 120*120 com 5460 posições - mínimo ?
+#arquivo = r"matrizes\C1000-9.mtx" # 1000 * 1000 com 450.079 posições - mínimo ?
+
 calcular(leitura_matriz_adjacencia(arquivo))
-
-"""
-    A resposta para o arquivo johnson8-2-4.mtx com apenas 28 vértices foi
-    Leitura concluída
-    A melhor atribuição encontrado de f(v):  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0]
-    Peso mínimo: 6
-    As atribuições das guarnições satisfazem a dominação romana total
-
-    O problema de Dominação Romana Total é combinatorial
-    johnson8-2-4.mtx tem 28 vértices
-    Como vértice pode assumir 3 valores [0, 1, 2] o espaço de busca para 3^28 possibilidades
-"""
