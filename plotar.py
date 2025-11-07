@@ -14,7 +14,16 @@ def plotar_grafo(grafo, atribuicoes, filename=r"imagens\grafo.png"):
             if not G.has_edge(v, u):
                 G.add_edge(v, u)
 
-    labels = {v: f"Vértice {v}\nGuarnição({atribuicoes[v]})" for v in range(n)}
+    # Mostra apenas labels 1 ou 2
+    labels = {
+        v: f"Vértice {v}\nGuarnição({atribuicoes[v]})"
+        for v in range(n)
+        if atribuicoes[v] == 1 or atribuicoes[v] == 2
+    }
+
+    # mostra todos os labels
+    #labels =  {v: f"Vértice {v}\nGuarnição({atribuicoes[v]})" for v in range(n)}
+
     nx.draw(G, labels=labels, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500)
     plt.savefig(filename)
     plt.show()
