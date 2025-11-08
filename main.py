@@ -21,8 +21,13 @@ def dominacao_romana_total(grafo):
 
     melhor_solucao = [None]
     melhor_peso = [float('inf')]
+
+    """
+        Aqui eu defino qual função utilizar, B&B ou guloso
+    """
     #branch_bound(grafo, atribuicoes, 0, melhor_solucao, melhor_peso, logfile, contador_vizinhos)
     branch_bound_zeros(grafo, atribuicoes, 0, melhor_solucao, melhor_peso, logfile, contador_vizinhos)
+
     return melhor_solucao[0], melhor_peso[0]
 
 """
@@ -47,14 +52,19 @@ def calcular(grafo):
     fim = time.perf_counter()
     print("Tempo de execução: %.2f segundos"% (fim - inicio))
 
-#arquivo = r"matrizes\johnson8-2-4.mtx" # 28*28 com 210 posições - mínimo 6 - novo 9
-#arquivo = r"matrizes\johnson8-4-4.mtx" # 45*45 com 918 posições - mínimo 4 - novo 13
-#arquivo = r"matrizes\johnson8-4-4.mtx" # 70*70 com 1855 posições - mínimo 4 - novo 13
-#arquivo = r"matrizes\c-fat200-2.mtx"  # 200*200 com 3235 posições - mínimo ? - novo 27
-#arquivo = r"matrizes\johnson16-2-4.mtx" # 120*120 com 5460 posições - mínimo ? - novo 9
-#arquivo = r"matrizes\C1000-9.mtx" # 1000 * 1000 com 450.079 posições - mínimo ? - novo 9
-#arquivo = r"matrizes\C4000-5.mtx" # 4000 * 4000 com 4.000.268 posições - mínimo ? - novo 35
-arquivo = r"matrizes\MANN-a81.mtx" # 3321 * 3321 com 5.506.380 posições - mínimo ? - novo 8
+# Arquivos em ordem pelo tamanho do arquivo
+# Arquivos com V=1000 impõe recursão de V e deixa a máquina bem lenta em razão da profundidade
+# Considere mínimo a primeira função.
+#   Se tiver ? é porque não terminou de rodar
+#   Se for observado que o número baixou muito eu colocarei o valor
+
+arquivo = r"matrizes\johnson8-2-4.mtx" # V=28 A=210 - Pesos: mínimo 6 - guloso 9 - gemini ?
+#arquivo = r"matrizes\hamming6-4.mtx" # V=64 A=704 - Pesos: mínimo ? (parei em 8) - guloso 24 - gemini 4 - piorou pra 6
+#arquivo = r"matrizes\MANN-a9.mtx" # V=45 A=918 - Pesos: mínimo 4 - guloso 8 - gemini ?
+#arquivo = r"matrizes\johnson8-4-4.mtx" # V=70 A=1855 - Pesos: mínimo 4 - guloso 13 - gemini ?
+#arquivo = r"matrizes\c-fat200-2.mtx" # V=200 A=3235 - Pesos: mínimo ? (parei em 113) - guloso 27 - gemini ?
+#arquivo = r"matrizes\johnson16-2-4.mtx" # V=120 A=5460 - Pesos: mínimo ? (parei em 7) - guloso 9 - gemini ?
+#arquivo = r"matrizes\C1000-9.mtx" # V=1000 A=450.079 - Pesos: mínimo ? - guloso 9 - gemini ?
 
 
 calcular(leitura_matriz_adjacencia(arquivo))

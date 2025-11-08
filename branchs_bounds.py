@@ -23,6 +23,8 @@ def branch_bound(grafo, atribuicoes, vertice, melhor_solucao, melhor_peso, logfi
     # A alteração [0, 1, 2] -> [2, 1, 0] deu uma queda drástica de processamento no arquivo
     # Provalvemente porque impõe restrições muito mais rápidas
     for valor_guarnicao in [2, 1, 0]:
+        print(f"Melhor peso {melhor_peso}")
+
         valor_antigo = atribuicoes[vertice]
 
         atribuicoes[vertice] = valor_guarnicao
