@@ -1,3 +1,4 @@
+import collections
 import time
 import random
 import networkx as nx
@@ -16,9 +17,12 @@ sys.setrecursionlimit(2000)
 # Variáveis Globais para armazenar a Melhor Solução Encontrada (Upper Bound)
 # Estas variáveis são modificadas durante a execução recursiva do B&B.
 global BEST_WEIGHT
-global BEST_STATES
 BEST_WEIGHT = float('inf')  # Inicializado com peso infinito
+global BEST_STATES
 BEST_STATES = None  # Inicializado sem solução
+global RESULTADOS
+RESULTADOS: List[Tuple[str, int]] = []
+global BRANCHING_ORDER
 BRANCHING_ORDER = [2, 1, 0]  # Heurística de ramificação: Prioriza atribuições mais promissoras (2, depois 1, depois 0)
 
 
@@ -27,7 +31,7 @@ BRANCHING_ORDER = [2, 1, 0]  # Heurística de ramificação: Prioriza atribuiç�
 # ======================================================================
 
 def plot_romana_domination_graph(G: Dict[int, Set[int]], states: List[Optional[int]],
-                                 filename: str):
+                                 arquivo: str):
     """
     Gera uma imagem do grafo destacando a solução de Dominação Romana Total (DRT).
 
@@ -44,6 +48,19 @@ def plot_romana_domination_graph(G: Dict[int, Set[int]], states: List[Optional[i
         states (List[Optional[int]]): Lista de pesos (0, 1, 2) para cada vértice (0-indexado).
         filename (str): Caminho completo para salvar o arquivo de imagem (e.g., .png).
     """
+
+    # Cria o caminho absoluto para o arquivo de imagem
+    output_dir = os.path.join(os.path.dirname(arquivo), r"imagens")
+    os.makedirs(output_dir, exist_ok=True)
+
+    _, extensao = os.path.splitext(arquivo)
+
+    if extensao.lower() == '.mtx':
+        graph_name = os.path.basename(arquivo).replace(".mtx", "_bb_h_G_mtx.png")
+    elif extensao.lower() == '.txt':
+        graph_name = os.path.basename(arquivo).replace(".txt", "_bb_h_G_txt.png")
+
+    filename = os.path.join(output_dir, graph_name)
 
     # 1. Conversão e Inicialização
     nx_graph = nx.Graph()
@@ -100,18 +117,104 @@ def plot_romana_domination_graph(G: Dict[int, Set[int]], states: List[Optional[i
         nx.draw_networkx_labels(nx_graph, pos, labels=labels_weight_0,
                                 font_size=10, font_color='black')
 
-    plt.title("Dominação Romana Total: Destaque em Vértices Selecionados (Peso 1 ou 2)")
+    plt.title(F"Dominação Romana Total: {arquivo}\n"
+              F"Branch and Bound (Hupper Bound Guloso) - Pesos 1 e 2 em vermelho")
     plt.axis('off')
 
     # 4. Salvamento da Imagem
     plt.savefig(filename)
     plt.close()
-    print(f"Grafo salvo em: {filename}")
+    #print(f"Grafo salvo em: {filename}")
 
 
 # ======================================================================
 # FUNÇÕES DE UTILIDADE (I/O)
 # ======================================================================
+
+def import_graph_and_order_txt(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
+    """
+    Importa um grafo a partir de um arquivo de lista de arestas (0-based)
+    com cabeçalho simples (V V E), como o formato 'grafo-70-0-0.7.txt'.
+
+    Realiza a conversão dos IDs de vértice de 0-based (arquivo) para 1-based (código B&B).
+
+    Returns:
+        Tuple[Dict[int, Set[int]], int, List[int]]: Grafo (G, 1-based),
+                                                   Número total de vértices (V),
+                                                   e Vértices ordenados por grau (decrescente).
+    """
+    G: Dict[int, Set[int]] = {}
+    V = 0
+    max_id_lido = 0  # O maior ID lido no arquivo (0-based)
+
+    try:
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+
+            # 1. Processamento do Cabeçalho (Pula comentários e linhas vazias, e lê V E)
+            data_start_line = 0
+
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if not line or line.startswith(('%', '#')):
+                    continue
+
+                parts = line.split()
+                try:
+                    # O cabeçalho deve ser a primeira linha não comentada com V V E.
+                    if len(parts) >= 3 and parts[2].isdigit():
+                        # Vértices são V e arestas são E
+                        V_lido = int(parts[0])
+                        # Atualiza V, o loop de dados deve começar na linha seguinte
+                        V = V_lido
+                        data_start_line = i + 1
+                    break
+                except ValueError:
+                    # Se falhar, assume que esta é a primeira linha de dados.
+                    break
+
+                    # 2. Leitura e Processamento das Arestas (A partir de data_start_line)
+            for line in lines[data_start_line:]:
+                parts = line.split()
+                if len(parts) < 2: continue
+                try:
+                    u_0based, v_0based = int(parts[0]), int(parts[1])
+
+                    # 💥 CONVERSÃO PARA 1-BASED
+                    u = u_0based + 1
+                    v = v_0based + 1
+
+                    # Rastreia o ID máximo (agora 1-based)
+                    max_id_lido = max(max_id_lido, u, v)
+
+                    # Adiciona arestas
+                    if u not in G: G[u] = set()
+                    if v not in G: G[v] = set()
+
+                    # Grafo não-direcionado
+                    G[u].add(v)
+                    G[v].add(u)
+                except ValueError:
+                    continue
+
+            # 3. Ajuste Final e Inicialização de Vértices
+            # Usa o maior valor lido para V, caso o cabeçalho esteja errado ou ausente.
+            V = max(V, max_id_lido)
+
+            # Garante que todos os vértices (1 a V) existam no dicionário G, mesmo se forem isolados.
+            for i in range(1, V + 1):
+                if i not in G: G[i] = set()
+
+    except FileNotFoundError:
+        print(f"Erro: Arquivo não encontrado no caminho: {file_path}")
+        return {}, 0, []
+
+    # 4. Ordenação dos Vértices (Heurística de Busca por Grau Decrescente)
+    vertex_degrees = [(len(G.get(u_id, set())), u_id) for u_id in range(1, V + 1)]
+    vertex_degrees.sort(key=lambda x: x[0], reverse=True)
+    ordered_vertices = [u_id for degree, u_id in vertex_degrees]
+
+    return G, V, ordered_vertices
 
 def import_graph_and_order(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
     """
@@ -177,6 +280,39 @@ def import_graph_and_order(file_path: str) -> Tuple[Dict[int, Set[int]], int, Li
 
     return G, V, ordered_vertices
 
+def recuperar_lista_arquivos(nome_pasta: str):
+    """
+    Abre a pasta especificada e gera uma lista com os nomes de todos
+    os arquivos e diretórios contidos nela.
+
+    Args:
+        nome_pasta (str): O nome da pasta a ser aberta.
+                          Assume que a pasta está no mesmo diretório
+                          que o script em execução.
+
+    Returns:
+        list: Uma lista de strings contendo os nomes dos arquivos e diretórios.
+    """
+    try:
+        # Usa os.listdir() para obter todos os nomes de arquivos e pastas no caminho
+        lista_de_itens = os.listdir(nome_pasta)
+
+        # Filtra para incluir apenas os arquivos.
+        # Você pode remover esta parte se quiser incluir subpastas também.
+        apenas_arquivos = []
+        for item in lista_de_itens:
+            caminho_completo = os.path.join(nome_pasta, item)
+            if os.path.isfile(caminho_completo):
+                apenas_arquivos.append(item)
+
+        return apenas_arquivos
+
+    except FileNotFoundError:
+        print(f"Erro: A pasta '{nome_pasta}' não foi encontrada.")
+        return []
+    except Exception as e:
+        print(f"Ocorreu um erro: {e}")
+        return []
 
 # ======================================================================
 # PRÉ-PROCESSAMENTO
@@ -482,6 +618,89 @@ def check_infeasibility_lookahead(G: Dict[int, Set[int]], estados: List[Optional
 
     return False  # Nenhuma inviabilidade detectada (poda não necessária)
 
+import os
+import pandas as pd
+from typing import List
+
+
+def exportar_excel(nome_arquivo: str = 'resultados_bb_h_gulosa.xlsx', sheet_name: str = 'Resultados B&B'):
+    """
+        Exporta o conteúdo da lista global RESULTADOS_GRAFOS_BRANCH_AND_BOUND
+        para um arquivo Excel.
+
+        Args:
+            nome_arquivo (str): Nome do arquivo Excel a ser criado.
+            sheet_name (str): Nome da planilha dentro do arquivo Excel.
+        """
+    global RESULTADOS
+
+    if not RESULTADOS:
+        print("⚠️ A lista de resultados está vazia. Nenhuma exportação para Excel realizada.")
+        return
+
+    try:
+        # 1. Cria o DataFrame do Pandas a partir da lista de tuplas global
+        df = pd.DataFrame(RESULTADOS, columns=['grafo', 'peso'])
+
+        # 2. Exporta o DataFrame para o Excel
+        # index=False: Evita que o índice numérico padrão do Pandas seja escrito no Excel.
+        df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='openpyxl')
+        #df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='xlsxwriter')
+
+        print("\n" + "=" * 50)
+        print(f"🎉 Exportação concluída com sucesso!")
+        print(f"Arquivo: '{nome_arquivo}' | Total de {len(df)} registros.")
+        print("=" * 50)
+
+    except ImportError:
+        print("❌ ERRO: A biblioteca 'openpyxl' (ou 'xlsxwriter') não está instalada.")
+        print("Instale-a usando: pip install openpyxl")
+    except Exception as e:
+        print(f"❌ Ocorreu um erro durante a exportação: {e}")
+
+def adicionar_resultado(nome_grafo: str, peso_encontrado: int):
+    """
+    Adiciona o nome do grafo e o peso calculado à lista global.
+    """
+    global RESULTADOS
+
+    # Adiciona o novo resultado como uma tupla (nome, peso)
+    RESULTADOS.append((nome_grafo, peso_encontrado))
+    print(f"Resultado adicionado: Grafo '{nome_grafo}', Peso: {peso_encontrado}")
+
+def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
+    """
+        Apresentação de Resultados
+    """
+    if melhores_estados is None:
+        print("\n❌ Solução não encontrada ou grafo inviável (o B&B pode ter sido parado cedo).")
+        print(f"Tempo de Execução: {tempo_total:.2f} segundos")
+        return
+
+    print("DOMINAÇÃO ROMANA TOTAL")
+    print(f"Menor peso: {melhor_peso}")
+    print("Vértices com peso 1 ou 2 (v: peso)")
+
+    # Filtra e formata apenas os vértices com peso 1 ou 2
+    vertices_selecionados = []
+    for i, peso in enumerate(BEST_STATES):
+        vertice_id = i + 1
+        if peso in (1, 2):
+            vertices_selecionados.append(f"v{vertice_id}: {peso}")
+
+    # Impressão formatada em blocos de 10
+    if vertices_selecionados:
+        chunk_size = 10
+        for j in range(0, len(vertices_selecionados), chunk_size):
+            linha = " | ".join(vertices_selecionados[j:j + chunk_size])
+            print(linha)
+    else:
+        print("Nenhum vértice com peso 1 ou 2 encontrado. (Solução W=0 ou erro)")
+
+    print("---------------------------------------------------------")
+    print(f"Tempo de execução: {tempo_total:.2f} segundos")
+    print("---------------------------------------------------------")
+
 # ======================================================================
 # FUNÇÕES GULOSA (Upper Bound)
 # ======================================================================
@@ -695,12 +914,25 @@ def branch_and_bound_romana(G: Dict[int, Set[int]], ordered_vertices: List[int])
     return BEST_STATES, BEST_WEIGHT
 
 
-def run_and_measure_romana_domination(file_path: str):
+def run_and_measure_romana_domination(arquivo: str):
     """Função principal que gerencia o fluxo de execução, mede o tempo e apresenta os resultados."""
-    print(f"Iniciando processamento para: {file_path} ---")
+    print(f"Iniciando processamento para: {arquivo} ---")
 
     # 1. Carregamento e Ordenação do Grafo
-    G, V, ordered_vertices = import_graph_and_order(file_path)
+    pasta_mtx = "matrizes\\"
+    pasta_txt = "grafos_aleatorios\\"
+
+    _, extensao = os.path.splitext(arquivo)
+
+    if extensao.lower() == '.mtx':
+        local_arquivo = pasta_mtx + arquivo
+        G, V, ordered_vertices = import_graph_and_order(local_arquivo)
+    elif extensao.lower() == '.txt':
+        local_arquivo = pasta_txt + arquivo
+        G, V, ordered_vertices = import_graph_and_order_txt(local_arquivo)
+
+    # 1. Carregamento e Ordenação do Grafo
+    #G, V, ordered_vertices = import_graph_and_order(file_path)
 
     # 2. PRÉ-PROCESSAMENTO: VERIFICAÇÃO DE VÉRTICES ISOLADOS
     if check_isolated_vertices(G):
@@ -720,7 +952,10 @@ def run_and_measure_romana_domination(file_path: str):
     end_time = time.perf_counter()
     execution_time = end_time - start_time
 
-    # 4. Apresentação de Resultados
+    # 4. Adiciona o resultado para uma lista de exportação
+    adicionar_resultado(arquivo, best_weight)
+
+    # 5. Apresentação de Resultados
     if best_estados is None:
         print("\n❌ Solução não encontrada ou grafo inviável (o B&B pode ter sido parado cedo).")
         print(f"Tempo de Execução: {execution_time:.2f} segundos")
@@ -750,19 +985,36 @@ def run_and_measure_romana_domination(file_path: str):
 
     print("---------------------------------------------------------")
 
-    # 5. Visualização do Grafo
+    """ # 5. Visualização do Grafo
     # Cria o caminho absoluto para o arquivo de imagem
-    output_dir = os.path.join(os.path.dirname(file_path), r"imagens")
+    output_dir = os.path.join(os.path.dirname(arquivo), r"imagens")
     os.makedirs(output_dir, exist_ok=True)
-    graph_name = os.path.basename(file_path).replace(".mtx", "_romana_plot.png")
-    output_filename = os.path.join(output_dir, graph_name)
+    graph_name = os.path.basename(arquivo).replace(".mtx", "_romana_plot.png")
+    output_filename = os.path.join(output_dir, graph_name)"""
 
-    plot_romana_domination_graph(G, BEST_STATES, output_filename)
+    plot_romana_domination_graph(G, BEST_STATES, arquivo)
 
 
 # ======================================================================
 # EXECUÇÃO DO SCRIPT
 # ======================================================================
+
+#pasta = "matrizes"
+pasta = "grafos_aleatorios"
+arquivos_encontrados = recuperar_lista_arquivos(pasta)
+
+if arquivos_encontrados:
+    print(f"✅ Arquivos encontrados em {pasta}:")
+    for arquivo in arquivos_encontrados:
+        print(f"{arquivo}")
+else:
+    print("❌ Não foram encontrados arquivos, ou a pasta não existe.")
+
+for grafo in arquivos_encontrados:
+    run_and_measure_romana_domination(grafo)
+
+
+exportar_excel()
 
 # Arquivos em ordem pelo tamanho do arquivo
 # Arquivos com V=1000 impõe recursão de V e deixa a máquina bem lenta em razão da profundidade
@@ -772,12 +1024,14 @@ def run_and_measure_romana_domination(file_path: str):
 
 # Log em bb_recursive após as variáveis globais
 
-arquivo = r"matrizes\johnson8-2-4.mtx" # V=28 A=210 - Pesos: mínimo 6 - guloso 9 - gemini 6 (guloso 6)
-#arquivo = r"matrizes\hamming6-4.mtx" # V=64 A=704 - Pesos: mínimo ? (parei em 8) - guloso 24 - gemini 16 (guloso 16)
-#arquivo = r"matrizes\MANN-a9.mtx" # V=45 A=918 - Pesos: mínimo 4 - guloso 8 - gemini 4 (guloso 4)
-#arquivo = r"matrizes\johnson8-4-4.mtx" # V=70 A=1855 - Pesos: mínimo 4 - guloso 13 - gemini 6 (guloso 8)
-#arquivo = r"matrizes\c-fat200-2.mtx" # V=200 A=3235 - Pesos: mínimo ? (parei em 113) - guloso 27 - gemini 28 (guloso 28)
-#arquivo = r"matrizes\johnson16-2-4.mtx" # V=120 A=5460 - Pesos: mínimo ? (parei em 7) - guloso 9 - gemini 6 (guloso 6)
-#arquivo = r"matrizes\C1000-9.mtx" # V=1000 A=450.079 - Pesos: mínimo ? - guloso 9 - gemini 6 (guloso 8)
+#arquivo = "johnson8-2-4.mtx" # V=28 A=210 - Pesos: bb 6 - bb_h_gulosa 6 (guloso 6)
+#arquivo = "hamming6-4.mtx" # V=64 A=704 - Pesos: bb ? (parei em 8) - bb_h_gulosa 16 (guloso 16)
+#arquivo = "MANN-a9.mtx" # V=45 A=918 - Pesos: bb 4 - bb_h_gulosa 4 (guloso 4)
+#arquivo = "johnson8-4-4.mtx" # V=70 A=1855 - Pesos: bb 4 - bb_h_gulosa 6 (guloso 8)
+#arquivo = "c-fat200-2.mtx" # V=200 A=3235 - Pesos: bb ? (parei em 113) - bb_h_gulosa 28 (guloso 28)
+#arquivo = "johnson16-2-4.mtx" # V=120 A=5460 - Pesos: bb ? (parei em 7) - bb_h_gulosa 6 (guloso 6)
+#arquivo = "C1000-9.mtx" # V=1000 A=450.079 - Pesos: bb ? - bb_h_gulosa 6 (guloso 8)
 
-run_and_measure_romana_domination(arquivo)
+#arquivo = "grafo-70-0-0.7.txt"
+
+#run_and_measure_romana_domination(arquivo)

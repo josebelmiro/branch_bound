@@ -1,27 +1,28 @@
+import math
 import time
-import random
-from collections import deque
-from operator import concat
+from turtle import pd
 
 import networkx as nx
 import matplotlib.pyplot as plt
-import sys
-from typing import Dict, Set, List, Optional, Tuple
+import openpyxl as xl
 import os  # Necessário para manipulação do caminho do arquivo (os.path.basename, etc.)
-
+import sys
 # --- CONFIGURAÇÃO DE AMBIENTE E VARIÁVEIS GLOBAIS ---
-
 # Define um limite de recursão maior que o número máximo de vértices esperado (V=1000).
 # O Branch and Bound (B&B) é um algoritmo de busca em profundidade (DFS)
 # e pode atingir uma profundidade de V (número de vértices).
 sys.setrecursionlimit(2000)
+from typing import Dict, Set, List, Optional, Tuple
 
 # Variáveis Globais para armazenar a Melhor Solução Encontrada (Upper Bound)
 # Estas variáveis são modificadas durante a execução recursiva do B&B.
 global BEST_WEIGHT
-global BEST_STATES
 BEST_WEIGHT = float('inf')  # Inicializado com peso infinito
+global BEST_STATES
 BEST_STATES = None  # Inicializado sem solução
+global RESULTADOS
+RESULTADOS: List[Tuple[str, int]] = []
+global BRANCHING_ORDER
 BRANCHING_ORDER = [2, 1, 0]  # Heurística de ramificação: Prioriza atribuições mais promissoras (2, depois 1, depois 0)
 
 
@@ -54,9 +55,9 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], arquivo:
     _, extensao = os.path.splitext(arquivo)
 
     if extensao.lower() == '.mtx':
-        graph_name = os.path.basename(arquivo).replace(".mtx", ".png")
+        graph_name = os.path.basename(arquivo).replace(".mtx", "_bb_mtx.png")
     elif extensao.lower() == '.txt':
-        graph_name = os.path.basename(arquivo).replace(".txt", ".png")
+        graph_name = os.path.basename(arquivo).replace(".txt", "_bb_txt.png")
 
     filename = os.path.join(output_dir, graph_name)
 
@@ -116,7 +117,7 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], arquivo:
                                 font_size=10, font_color='black')
 
     plt.title(F"Dominação Romana Total: {arquivo}\n"
-              F"Em vermelho (Peso 1 ou 2)")
+              F"Branch and Bound - Pesos 1 e 2 em vermelho")
     plt.axis('off')
 
     # 4. Salvamento da Imagem
@@ -191,10 +192,6 @@ def importar_grafo_mtx(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[i
     ordered_vertices = [u_id for degree, u_id in vertex_degrees]
 
     return G, V, ordered_vertices
-
-
-from typing import Dict, Set, List, Optional, Tuple
-
 
 def importar_grafo_txt(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
     """
@@ -280,6 +277,91 @@ def importar_grafo_txt(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[i
     ordered_vertices = [u_id for degree, u_id in vertex_degrees]
 
     return G, V, ordered_vertices
+
+def recuperar_lista_arquivos(nome_pasta: str):
+    """
+    Abre a pasta especificada e gera uma lista com os nomes de todos
+    os arquivos e diretórios contidos nela.
+
+    Args:
+        nome_pasta (str): O nome da pasta a ser aberta.
+                          Assume que a pasta está no mesmo diretório
+                          que o script em execução.
+
+    Returns:
+        list: Uma lista de strings contendo os nomes dos arquivos e diretórios.
+    """
+    try:
+        # Usa os.listdir() para obter todos os nomes de arquivos e pastas no caminho
+        lista_de_itens = os.listdir(nome_pasta)
+
+        # Filtra para incluir apenas os arquivos.
+        # Você pode remover esta parte se quiser incluir subpastas também.
+        apenas_arquivos = []
+        for item in lista_de_itens:
+            caminho_completo = os.path.join(nome_pasta, item)
+            if os.path.isfile(caminho_completo):
+                apenas_arquivos.append(item)
+
+        return apenas_arquivos
+
+    except FileNotFoundError:
+        print(f"Erro: A pasta '{nome_pasta}' não foi encontrada.")
+        return []
+    except Exception as e:
+        print(f"Ocorreu um erro: {e}")
+        return []
+
+
+import os
+import pandas as pd
+from typing import List
+
+
+def exportar_excel(nome_arquivo: str = 'resultados_bb.xlsx', sheet_name: str = 'Resultados B&B'):
+    """
+        Exporta o conteúdo da lista global RESULTADOS_GRAFOS_BRANCH_AND_BOUND
+        para um arquivo Excel.
+
+        Args:
+            nome_arquivo (str): Nome do arquivo Excel a ser criado.
+            sheet_name (str): Nome da planilha dentro do arquivo Excel.
+        """
+    global RESULTADOS
+
+    if not RESULTADOS:
+        print("⚠️ A lista de resultados está vazia. Nenhuma exportação para Excel realizada.")
+        return
+
+    try:
+        # 1. Cria o DataFrame do Pandas a partir da lista de tuplas global
+        df = pd.DataFrame(RESULTADOS, columns=['grafo', 'peso'])
+
+        # 2. Exporta o DataFrame para o Excel
+        # index=False: Evita que o índice numérico padrão do Pandas seja escrito no Excel.
+        df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='openpyxl')
+        #df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='xlsxwriter')
+
+        print("\n" + "=" * 50)
+        print(f"🎉 Exportação concluída com sucesso!")
+        print(f"Arquivo: '{nome_arquivo}' | Total de {len(df)} registros.")
+        print("=" * 50)
+
+    except ImportError:
+        print("❌ ERRO: A biblioteca 'openpyxl' (ou 'xlsxwriter') não está instalada.")
+        print("Instale-a usando: pip install openpyxl")
+    except Exception as e:
+        print(f"❌ Ocorreu um erro durante a exportação: {e}")
+
+def adicionar_resultado(nome_grafo: str, peso_encontrado: int):
+    """
+    Adiciona o nome do grafo e o peso calculado à lista global.
+    """
+    global RESULTADOS
+
+    # Adiciona o novo resultado como uma tupla (nome, peso)
+    RESULTADOS.append((nome_grafo, peso_encontrado))
+    print(f"Resultado adicionado: Grafo '{nome_grafo}', Peso: {peso_encontrado}")
 
 def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
     """
@@ -405,68 +487,94 @@ def atribuicao_valida(G: Dict[int, Set[int]], estados: List[Optional[int]]) -> b
 # FUNÇÕES DE PODA (Branch and Bound)
 # ======================================================================
 
-from typing import Dict, Set, List, Optional, Tuple
-
-
 def calculate_lower_bound(G: Dict[int, Set[int]], estados: List[Optional[int]], current_weight: int) -> int:
+    """
+    Calcula o Lower Bound (LB) para a Dominação Romana Total.
+
+    LB = W_current + Soma (Custo Mínimo Obrigatório para Dominação)
+    O custo mínimo é a soma de 1/|N(u) ∩ V_U| para cada restrição de dominação.
+    """
     lower_bound = current_weight
+    V = len(estados)
 
-    for u_id in G.keys():
-        u_index = u_id - 1
+    # 1. Conjuntos de Vértices
+    V_U = {i + 1 for i, val in enumerate(estados) if val is None}
 
-        # Ignora vértices já atribuídos
-        if estados[u_index] is not None:
-            continue
+    # Armazena a demanda total de peso que o conjunto V_U deve suprir
+    total_min_demand = 0.0
 
-        # -------------------------------------------------------------
-        # CALCULA A CONTRIBUIÇÃO MÍNIMA NECESSÁRIA (0, 1, ou 2)
-        # -------------------------------------------------------------
-        min_contribution = 0
-        is_dominated_by_Va_ge1 = False
+    # --- Itera sobre TODOS os vértices v ∈ V (V_A U V_U) ---
+    for v_index in range(V):
+        v_id = v_index + 1
+        v_val = estados[v_index]
+        N_v = G.get(v_id, set())
 
-        # Itera sobre os vizinhos do nó u (em V_U)
-        for v_id in G.get(u_id, set()):
-            v_index = v_id - 1
-            v_val = estados[v_index]
+        # Vértices vizinhos em V_U (potenciais doadores de peso)
+        N_v_U = N_v.intersection(V_U)
+        count_N_v_U = len(N_v_U)
 
-            # VIZINHO EM V_A
-            if v_val is not None:
+        # O nó v já está dominado ou não tem vizinhos?
+        is_fully_dominated = False
 
-                # A. Checa dominação trivial (Restrição C2)
-                if v_val in (1, 2):
-                    is_dominated_by_Va_ge1 = True
+        # Verifica dominação por V_A
+        if v_val is not None:
+            # Se v ∈ V_A
 
-                # B. Checa a necessidade de w=2 (Restrição C1)
-                if v_val == 1:
-                    # Vizinho v com w=1 precisa de um vizinho com w=2 (para dominação romana)
-                    # Checa se o requisito w=2 já está satisfeito por V_A
-                    has_w2_neighbor_in_Va = any(estados[w_id - 1] == 2
-                                                for w_id in G[v_id]
-                                                if estados[w_id - 1] is not None and w_id != u_id)
+            # Checagem C1/C2: v já é dominado por um vizinho em V_A?
+            if v_val == 0:
+                # Regra C1: Precisa de vizinho com peso 2
+                is_fully_dominated = any(estados[w - 1] == 2 for w in N_v if estados[w - 1] is not None)
+            else:
+                # Regra C2: Precisa de vizinho com peso 1 ou 2
+                is_fully_dominated = any(estados[w - 1] in (1, 2) for w in N_v if estados[w - 1] is not None)
 
-                    if not has_w2_neighbor_in_Va:
-                        # Se v (w=1) não é dominado por um w=2 em V_A, ele precisa de alguém em V_U.
-                        # Se u é o único em V_U que pode fornecê-lo:
+        else:
+            # Se v ∈ V_U
+            # v é dominado se ele tiver um vizinho em V_A com peso 1 ou 2 (C2)
+            is_fully_dominated = any(estados[w - 1] in (1, 2) for w in N_v if estados[w - 1] is not None)
 
-                        vizinhos_Vu_v = {w_id for w_id in G[v_id] if estados[w_id - 1] is None}
+        # --- Cálculo da Demanda Mínima de V_U (Se não dominado) ---
 
-                        # Se u é o ÚNICO em V_U que pode satisfazer v (w=1):
-                        if len(vizinhos_Vu_v) == 1 and u_id in vizinhos_Vu_v:
-                            # A contribuição mínima de u tem que ser 2 para satisfazer v
-                            min_contribution = max(min_contribution, 2)
+        if not is_fully_dominated:
 
-            # VIZINHO EM V_U (LB Fraco: Ignorado para manter a complexidade)
-            # Para LB mais forte, você faria emparelhamento ou outra análise em V_U
+            # Se não há mais esperança em V_U, o ramo é inviável, mas isso
+            # deve ser pego pela 'verificar_inviabilidade_local'.
+            if count_N_v_U == 0:
+                # Se a poda falhar e chegar aqui, retorna infinito (inviável).
+                # No entanto, para ser estritamente um LB, assumimos que
+                # a 'verificar_inviabilidade_local' já podou esse caso.
+                # Se não podou, o custo é tecnicamente infinito.
+                # Para robustez, vamos ignorar a contribuição, esperando a poda.
+                continue
 
-        # -------------------------------------------------------------
-        # FINALIZAÇÃO DA CONTRIBUIÇÃO PARA O LB
-        # -------------------------------------------------------------
+            # 1. Contribuição de v ∈ V_U (O nó precisa se dominar, ou ser dominado)
+            if v_val is None:  # v ∈ V_U
+                # O nó v precisa de dominação: ele deve receber peso w(v)>=1, OU um vizinho w(u)>=1
+                # O custo mínimo é 1 (o próprio v deve ter w(v)=1) dividido pelo número de opções
+                # que ele tem (incluindo ele próprio e vizinhos em V_U).
 
-        if not is_dominated_by_Va_ge1 and min_contribution < 1:
-            # Se u não é dominado por V_A (C2), e a Restrição C1 não o forçou a 2, ele precisa de pelo menos 1.
-            min_contribution = max(min_contribution, 1)
+                # O custo mínimo de dominação é 1 (peso 1 em v ou em um vizinho)
+                total_options = count_N_v_U + 1  # v + N(v) ∩ V_U
+                total_min_demand += 1.0 / total_options
 
-        lower_bound += min_contribution
+
+            # 2. Contribuição de v ∈ V_A (O nó precisa ser 'reforçado')
+            else:  # v ∈ V_A, mas não totalmente dominado
+
+                # Se v foi atribuído 0, ele exige w=2 de V_U.
+                if v_val == 0:
+                    # Demanda mínima de 2 (dividida entre vizinhos em V_U)
+                    total_min_demand += 2.0 / count_N_v_U
+
+                # Se v foi atribuído 1 ou 2, ele exige w=1 ou 2 de V_U (Mas w=1 é suficiente para C2).
+                # Note: Esta é a versão MAIS CONSERVADORA para evitar poda válida.
+                # Se v não está dominado, a DRT falha.
+                elif v_val in (1, 2):
+                    # Demanda mínima de 1 (dividida entre vizinhos em V_U)
+                    total_min_demand += 1.0 / count_N_v_U
+
+    # O Lower Bound final é o peso atual mais a demanda total, arredondado para cima.
+    lower_bound += int(math.ceil(total_min_demand))
 
     return lower_bound
 
@@ -474,6 +582,60 @@ def calculate_lower_bound(G: Dict[int, Set[int]], estados: List[Optional[int]], 
 # ======================================================================
 # FUNÇÕES DE RAMIFICAÇÃO (Branch and Bound)
 # ======================================================================
+
+"""
+    Tem o objetivo de forçar a atribuição de novos valores com base no contexto do vértice
+    Teoricamente te alta significância, mas aparentemente com vértices pouco conectados
+    Função com baixo impacto (raridade) para o exemplos disponíveis e com alto custo de processamento
+"""
+def forcamento_valores(G, estados, u_id):
+    forced_value = None
+
+    # Verificação de forçamento: u é o único em V_U que pode satisfazer um vizinho v em V_A?
+    for v_id in G.get(u_id, set()):
+        print("teste")
+        v_index = v_id - 1
+        v_val = estados[v_index]  # Peso do vizinho v
+
+        if v_val is not None:
+            vizinhos_Vu_v = {w for w in G.get(v_id) if estados[w - 1] is None}
+
+            if len(vizinhos_Vu_v) == 1 and u_id in vizinhos_Vu_v:
+                # Caso 1: V precisa de um vizinho w=2 (v_val=0)
+                if v_val == 0:
+                    is_dominated_by_w2_in_Va = any(estados[w - 1] == 2 for w in G[v_id] if estados[w - 1] is not None)
+                    if not is_dominated_by_w2_in_Va:
+                        # U é o único que pode fornecer w=2.
+                        forced_value = 2
+                        break  # Forçado a 2, não checar mais
+
+                # Caso 2: V precisa de um vizinho w>=1 (v_val=1 ou 2)
+                elif v_val in (1, 2):
+                    is_dominated_by_w12_in_Va = any(
+                        estados[w - 1] in (1, 2) for w in G[v_id] if estados[w - 1] is not None)
+                    if not is_dominated_by_w12_in_Va:
+                        # U é o único que pode fornecer w>=1. Forçado a ser 1 ou 2.
+                        # Se já forçado a 2, mantém 2. Caso contrário, força 1.
+                        if forced_value is None:
+                            forced_value = 1
+                        # Não quebra, pois o forçamento a 2 (Caso 1) é mais forte.
+
+    # Se houver um valor forçado, a ramificação deve ser simplificada
+    if forced_value is not None:
+        # Ramificação única para o valor forçado (e checagem de poda)
+        if forced_value == 2:
+            # Apenas tenta w=2
+            values_to_branch = [2]
+        elif forced_value == 1:
+            # Tenta w=1, mas w=2 também é válido
+            values_to_branch = [2, 1]
+        else:  # forced_value == 0 (raro, a menos que haja uma heurística de dominância)
+            values_to_branch = [0]
+    else:
+        # Ramificação normal (sua ordem heurística original)
+        values_to_branch = BRANCHING_ORDER
+
+    return values_to_branch
 
 def bb_recursive(G: Dict[int, Set[int]],
                  V: int,
@@ -523,42 +685,15 @@ def bb_recursive(G: Dict[int, Set[int]],
     u_id = ordered_vertices[list_index]  # ID do vértice (1-based)
     u_index = u_id - 1  # Índice do vértice (0-based)
 
+    # Função com baixo impacto (raridade) para os exemplos disponíveis e com alto custo de processamento
+    #values_to_branch = forcamento_valores(G, estados, u_id)
+
     # A ordem de ramificação (2, 1, 0) é uma heurística para encontrar bons bounds
     # mais rapidamente, priorizando pesos mais altos.
     for value in BRANCHING_ORDER:
-
         new_estados = list(estados)
         new_estados[u_index] = value
         new_weight = current_weight + value
-
-        # 1. Se u_id foi atribuído 0, checa se ele está condenado
-        if value == 0:
-            # Se u_id=0, ele precisa de um vizinho w=2.
-            # Se TODOS os vizinhos N(u) já foram atribuídos (V_A), e nenhum é w=2, o ramo é inviável.
-            vizinhos_Va = {v for v in G.get(u_id) if new_estados[v - 1] is not None}
-            if not G.get(u_id) or len(vizinhos_Va) == len(G.get(u_id)):  # Todos em V_A
-                if not any(new_estados[v - 1] == 2 for v in vizinhos_Va):
-                    continue  # Poda: u=0 está condenado.
-
-        # 2. Checa se u_id é um fornecedor OBRIGATÓRIO (w=2)
-        # Se u_id é vizinho de algum w' que obriga u_id a ser w=2, e 'value' não é 2, poda.
-        for w_id in G.get(u_id, set()):
-            w_index = w_id - 1
-            w_val = new_estados[w_index]
-
-            # Só checamos se o vizinho w é um nó de peso 0 já atribuído
-            if w_val == 0:
-                # Re-calculamos a esperança de w
-                vizinhos_Va_w = {v for v in G.get(w_id) if new_estados[v - 1] is not None}
-                vizinhos_Vu_w = {v for v in G.get(w_id) if new_estados[v - 1] is None}
-
-                tem_w2_em_Va = any(new_estados[v - 1] == 2 for v in vizinhos_Va_w)
-
-                # Se w precisa de w=2 e u_id é o ÚNICO que sobrou em V_U
-                if not tem_w2_em_Va and len(vizinhos_Vu_w) == 1 and u_id in vizinhos_Vu_w:
-                    # Se u_id é o fornecedor obrigatório, mas value não é 2, PODA!
-                    if value != 2:
-                        continue  # Poda: Obrigação de w=2 violada.
 
         # ⛔ PODA TRIVIAL E RÁPIDA: Custo Atual vs. Upper Bound
         # Se o custo parcial já excede o melhor encontrado, não há necessidade de prosseguir.
@@ -566,10 +701,8 @@ def bb_recursive(G: Dict[int, Set[int]],
             continue
 
         # Poda de lower bound
-        if new_weight + 1 >= BEST_WEIGHT:
+        if calculate_lower_bound(G, estados, new_weight) >= BEST_WEIGHT:
             continue
-
-
 
         # 4. CHAMADA RECURSIVA: Procede para o próximo vértice
         bb_recursive(G, V, ordered_vertices, new_estados, new_weight, list_index + 1)
@@ -633,24 +766,40 @@ def dominacao(arquivo: str):
     end_time = time.perf_counter()
     tempo_total = end_time - start_time
 
-    # 4. Impressão do resultado
+    # 4. Adiciona o resultado para uma lista de exportação
+    adicionar_resultado(arquivo, melhor_peso)
+
+    # 5. Impressão do resultado
     impressao_resultado(melhores_estados, melhor_peso, tempo_total)
 
-    # 5. Plotagem do Grafo
+    # 6. Plotagem do Grafo
     plotar_grafico(G, BEST_STATES, arquivo)
 
 # ======================================================================
 # EXECUÇÃO DO SCRIPT
 # ======================================================================
 
-arquivo = "johnson8-2-4.mtx" # V=28 A=210 - Pesos: bb 6 - bb_h_gulosa 6 (guloso 6)
+#pasta = "matrizes"
+pasta = "grafos_aleatorios"
+arquivos_encontrados = recuperar_lista_arquivos(pasta)
+
+if arquivos_encontrados:
+    print(f"✅ Arquivos encontrados em {pasta}:")
+    for arquivo in arquivos_encontrados:
+        print(f"{arquivo}")
+else:
+    print("❌ Não foram encontrados arquivos, ou a pasta não existe.")
+
+for grafo in arquivos_encontrados:
+    dominacao(grafo)
+
+
+exportar_excel()
+#arquivo = "johnson8-2-4.mtx" # V=28 A=210 - Pesos: bb 6 - bb_h_gulosa 6 (guloso 6)
 #arquivo = "hamming6-4.mtx" # V=64 A=704 - Pesos: bb ? (parei em 8) - bb_h_gulosa 16 (guloso 16)
 #arquivo = "MANN-a9.mtx" # V=45 A=918 - Pesos: bb 4 - bb_h_gulosa 4 (guloso 4)
 #arquivo = "johnson8-4-4.mtx" # V=70 A=1855 - Pesos: bb 4 - bb_h_gulosa 6 (guloso 8)
 #arquivo = "c-fat200-2.mtx" # V=200 A=3235 - Pesos: bb ? (parei em 113) - bb_h_gulosa 28 (guloso 28)
 #arquivo = "johnson16-2-4.mtx" # V=120 A=5460 - Pesos: bb ? (parei em 7) - bb_h_gulosa 6 (guloso 6)
 #arquivo = "C1000-9.mtx" # V=1000 A=450.079 - Pesos: bb ? - bb_h_gulosa 6 (guloso 8)
-
 #arquivo = "grafo-70-0-0.7.txt"
-
-dominacao(arquivo)
