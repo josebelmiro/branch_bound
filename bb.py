@@ -1,19 +1,11 @@
 import math
 import random
 import time
-from turtle import pd
 
 import networkx as nx
 import matplotlib.pyplot as plt
-import openpyxl as xl
-import os  # Necessário para manipulação do caminho do arquivo (os.path.basename, etc.)
-import sys
-# --- CONFIGURAÇÃO DE AMBIENTE E VARIÁVEIS GLOBAIS ---
-# Define um limite de recursão maior que o número máximo de vértices esperado (V=1000).
-# O Branch and Bound (B&B) é um algoritmo de busca em profundidade (DFS)
-# e pode atingir uma profundidade de V (número de vértices).
-sys.setrecursionlimit(2000)
 from typing import Dict, Set, List, Optional, Tuple
+from turtle import pd
 
 # Variáveis Globais para armazenar a Melhor Solução Encontrada (Upper Bound)
 # Estas variáveis são modificadas durante a execução recursiva do B&B.
