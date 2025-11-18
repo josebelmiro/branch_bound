@@ -26,7 +26,7 @@ BRANCHING_ORDER = [2, 1, 0]  # Heurística de ramificação: Prioriza atribuiç�
 # FUNÇÃO PARA VISUALIZAÇÃO DE GRAFOS
 # ======================================================================
 
-def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], arquivo: str, tecnica: str, is_lower_bound: bool, is_upper_bound: bool):
+def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: int, arquivo: str, tecnica: str, is_lower_bound: bool, is_upper_bound: bool):
     """
     Gera uma imagem do grafo destacando a solução de Dominação Romana Total (DRT).
 
@@ -122,7 +122,8 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], arquivo:
                                 font_size=10, font_color='black')
 
     plt.title(F"Dominação Romana Total: {arquivo}\n"
-              F"Branch and Bound ({lower} - {upper}) - Pesos 1 e 2 em vermelho")
+              F"{tecnica} ({lower} {upper}) - Peso total: {peso}\n"
+              F"Pesos 1 e 2 em vermelho")
     plt.axis('off')
 
     # 4. Salvamento da Imagem
@@ -729,7 +730,7 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
 
     return estados_guloso, current_weight
 
-def melhor_peso_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: int = 10) -> Tuple[
+def peso_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: int = 10) -> Tuple[
     int, List[int]]:
     """
     Executa a heurística gulosa múltiplas vezes com ordens de vértices diferentes
@@ -861,7 +862,7 @@ def branch_and_bound(G: Dict[int, Set[int]], ordered_vertices: List[int], is_low
     if is_upper_bound:
         # 1. Inicializa o Upper Bound (U) com a solução Gulosa Otimizada
         # Uma boa solução inicial (U) é crucial para a eficácia das podas.
-        best_u, best_u_states = melhor_peso_guloso(G, ordered_vertices, attempts=10)
+        best_u, best_u_states = peso_guloso(G, ordered_vertices, attempts=10)
 
         # Inicializa as variáveis globais do B&B
         BEST_WEIGHT = best_u
@@ -916,11 +917,6 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
 
     melhores_estados, melhor_peso = branch_and_bound(G, vertices_ordenados, is_lower_bound, is_upper_bound)
 
-    """if tecnica.lower() == "puro":
-        melhores_estados, melhor_peso = branch_and_bound(G, vertices_ordenados, is_lower_bound, is_upper_bound)
-    elif tecnica.lower() == "guloso":
-        melhores_estados, melhor_peso = branch_and_bound_h_gulosa(G, vertices_ordenados)"""
-
     # 3. Execução e Medição de Tempo
     end_time = time.perf_counter()
     tempo_total = end_time - start_time
@@ -932,7 +928,75 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
     adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, melhor_peso, round(tempo_total, 2), vertices_selecionados)
 
     # 6. Plotagem do Grafo
-    plotar_grafico(G, BEST_STATES, arquivo, tecnica, is_lower_bound, is_upper_bound)
+    plotar_grafico(G, BEST_STATES, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
+
+# ======================================================================
+# Dominação por atribuição direta - Estratégia gulosa
+# ======================================================================
+
+def dominacao_por_atribuicao_direta(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_upper_bound: bool):
+    """
+        Função que realiza a atribuição direta (gulosa) sem aplicação de heurística
+        Entrada:
+            Grafo ordenado de forma decrescente pelo número de vertices.
+        Funcionamento:
+            Caso o vértice não esteja atribuído
+            1º: Atribui o valor 2 ao vértice atual
+            2ª: Atribui o valor 1 ao primeiro vértice conectado
+            3ª: atribui 0  aos demais vértices conectados
+
+    """
+    print("---------------------------------------------------------")
+    print(f"Iniciando processamento ({tecnica}) para: {arquivo}")
+    print("---------------------------------------------------------")
+
+    # 1. Carregamento e Ordenação do Grafo
+    _, extensao = os.path.splitext(arquivo)
+    local_arquivo = pasta + arquivo
+
+    # Diferença para indicar se o índice do grafo começa em 0 ou 1
+    # G, V, vertices_ordenados = importar_base0(local_arquivo)
+    G, V, vertices_ordenados = importar_base1(local_arquivo)
+
+    # 2. PRÉ-PROCESSAMENTO: VERIFICAÇÃO DE VÉRTICES ISOLADOS
+    if vertices_isolados(G):
+        # Levanta exceção, pois a DRT não é possível (Peso infinito)
+        raise ValueError(
+            "O grafo é inválido para Dominação Romana Total: Contém vértices isolados (grau 0). "
+            "A DRT não pode ser formada."
+        )
+
+    if V == 0:
+        print("Erro: Grafo não carregado ou vazio.")
+        return
+
+    # 3. Execução e Medição de Tempo
+    start_time = time.perf_counter()
+
+    # REINICIALIZAÇÃO
+    global BEST_WEIGHT
+    global BEST_STATES
+    BEST_WEIGHT = float('inf')  # Reset para o B&B começar do zero
+    BEST_STATES = None
+
+    melhores_estados, melhor_peso = upper_bound_guloso(G, vertices_ordenados)
+
+    BEST_STATES = melhor_peso
+    BEST_STATES = melhores_estados
+
+    # 3. Execução e Medição de Tempo
+    end_time = time.perf_counter()
+    tempo_total = end_time - start_time
+
+    # 4. Impressão do resultado
+    vertices_selecionados = impressao_resultado(melhores_estados, melhor_peso, tempo_total)
+
+    # 5. Adiciona o resultado para uma lista de exportação
+    adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, melhor_peso, round(tempo_total, 2),
+                        vertices_selecionados)
+
+    # 6. Plotagem do Grafo
+    plotar_grafico(G, BEST_STATES, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
 
 # ======================================================================
 # EXECUÇÃO DO SCRIPT
@@ -952,9 +1016,7 @@ else:
 
 # Operação de dominação romana
 for grafo in arquivos_encontrados:
-    dominacao('B&B', grafo, pasta, False, False)
-    dominacao('B&B', grafo, pasta, False, True)
-    dominacao('B&B', grafo, pasta, True, False)
-    dominacao('B&B', grafo, pasta, True, True)
+    #dominacao('B&B', grafo, pasta, False, False)
+    dominacao_por_atribuicao_direta('Atribuição', grafo, pasta, False, False)
 
 exportar_excel()
