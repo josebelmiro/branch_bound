@@ -7,7 +7,8 @@ import os
 import pandas as pd
 
 from typing import Dict, Set, List, Optional, Tuple
-#from turtle import pd
+
+# from turtle import pd
 
 # Variáveis Globais para armazenar a Melhor Solução Encontrada (Upper Bound)
 # Estas variáveis são modificadas durante a execução recursiva do B&B.
@@ -26,7 +27,8 @@ BRANCHING_ORDER = [2, 1, 0]  # Heurística de ramificação: Prioriza atribuiç�
 # FUNÇÃO PARA VISUALIZAÇÃO DE GRAFOS
 # ======================================================================
 
-def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: int, arquivo: str, tecnica: str, is_lower_bound: bool, is_upper_bound: bool):
+def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: int, arquivo: str, tecnica: str,
+                   is_lower_bound: bool, is_upper_bound: bool):
     """
     Gera uma imagem do grafo destacando a solução de Dominação Romana Total (DRT).
 
@@ -39,7 +41,7 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: in
     A cor da fonte é preta para todos os rótulos.
 
     Args:
-        G (Dict[int, Set[int]]): O grafo no formato de lista de adjacência (1-indexado).
+        G (Dict[int, Set[int]]): O grafo no formato de lista de adjacência (0-indexado).
         states (List[Optional[int]]): Lista de pesos (0, 1, 2) para cada vértice (0-indexado).
         filename (str): Caminho completo para salvar o arquivo de imagem (e.g., .png).
     """
@@ -84,17 +86,18 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: in
 
     # 2. Iteração e Mapeamento de Cores/Rótulos
     for i, weight in enumerate(states):
-        node_id = i + 1  # Converte o índice 0-based para o ID do vértice 1-based
+        node_id = i  # O ID do nó é o próprio índice 0-based
 
         # Mapeia o ID do nó para a cor correspondente (para garantir a ordenação correta)
         color = color_map_weights.get(weight, 'lightgray')
         node_color_map[node_id] = color
 
-        # Define o rótulo com a formatação solicitada (V{id}={peso})
+        # Define o rótulo com a formatação solicitada (V{id}={peso}).
+        # Note: Apenas para exibição, adicionamos 1 ao ID (0-based)
         if weight in (1, 2):
-            labels_weight_1_2[node_id] = f'V{node_id}={weight}'
+            labels_weight_1_2[node_id] = f'v{node_id}:{weight}'
         else:  # Peso 0
-            labels_weight_0[node_id] = f'V{node_id}'
+            labels_weight_0[node_id] = f'v{node_id}'
 
     # 3. Desenho do Grafo
     plt.figure(figsize=(12, 10))
@@ -129,20 +132,23 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: in
     # 4. Salvamento da Imagem
     plt.savefig(filename)
     plt.close()
-    #print(f"Grafo salvo em: {filename}")
+    # print(f"Grafo salvo em: {filename}")
+
 
 # ======================================================================
 # FUNÇÕES DE UTILIDADE (I/O)
 # ======================================================================
 
-def importar_base0(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
+def importar_base1(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
     """
     Importa um grafo a partir do formato MTX (Matrix Market) e retorna a lista de adjacência
     e uma ordem de visitação dos vértices por grau decrescente (heurística para B&B).
 
+    ATENÇÃO: Adaptado para ler um MTX (que geralmente é 1-based) e converter para 0-based.
+
     Returns:
-        Tuple[Dict[int, Set[int]], int, List[int]]: Grafo (G), Número total de vértices (V),
-                                                   e Vértices ordenados por grau (decrescente).
+        Tuple[Dict[int, Set[int]], int, List[int]]: Grafo (G, 0-based), Número total de vértices (V),
+                                                   e Vértices ordenados por grau (decrescente, 0-based).
     """
     G: Dict[int, Set[int]] = {}
     V = 0
@@ -155,20 +161,24 @@ def importar_base0(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]
             try:
                 line = f.readline().split()
                 if len(line) < 3: raise ValueError("Cabeçalho inválido.")
-                V = max(int(line[0]), int(line[1]))  # Assume V é o maior valor do cabeçalho
+                V = max(int(line[0]), int(line[1]))
             except Exception:
                 return G, V, []
 
-            # Inicializa a lista de adjacência (G) para todos os V vértices
-            for i in range(1, V + 1): G[i] = set()
-            max_id = V
+            # Inicializa a lista de adjacência (G) para todos os V vértices (0 a V-1)
+            for i in range(V): G[i] = set()
+            max_id = V - 1  # O maior ID lido no arquivo (1-based)
 
             # Lê as arestas
             for line in f:
                 parts = line.split()
                 if len(parts) < 2: continue
                 try:
-                    u, v = int(parts[0]), int(parts[1])
+                    # Lê 1-based e CONVERTE para 0-based
+                    u_1based, v_1based = int(parts[0]), int(parts[1])
+                    u = u_1based - 1  # Conversão para 0-based
+                    v = v_1based - 1  # Conversão para 0-based
+
                     max_id = max(max_id, u, v)
 
                     # Trata o caso de IDs de vértice maiores que o declarado no cabeçalho
@@ -182,10 +192,10 @@ def importar_base0(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]
                     continue
 
             # Ajusta V se o max_id for maior que o V inicial
-            if max_id > V:
-                for i in range(V + 1, max_id + 1):
+            if max_id + 1 > V:
+                for i in range(V, max_id + 1):
                     if i not in G: G[i] = set()
-                V = max_id
+                V = max_id + 1
     except FileNotFoundError:
         print(f"Erro: Arquivo não encontrado no caminho: {file_path}")
         return {}, 0, []
@@ -193,27 +203,28 @@ def importar_base0(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]
     # Ordenação dos Vértices (Heurística de Busca)
     # A ordem decrescente de grau ajuda o B&B a tomar decisões mais informadas (com maior impacto)
     # no início da árvore de busca.
-    vertex_degrees = [(len(G[u_id]), u_id) for u_id in G]
+    vertex_degrees = [(len(G.get(u_id, set())), u_id) for u_id in range(V)]
     vertex_degrees.sort(key=lambda x: x[0], reverse=True)
     ordered_vertices = [u_id for degree, u_id in vertex_degrees]
 
     return G, V, ordered_vertices
 
-def importar_base1(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
+
+def importar_base0(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
     """
     Importa um grafo a partir de um arquivo de lista de arestas (0-based)
     com cabeçalho simples (V V E), como o formato 'grafo-70-0-0.7.txt'.
 
-    Realiza a conversão dos IDs de vértice de 0-based (arquivo) para 1-based (código B&B).
+    O Grafo e os vértices são mantidos em 0-based para todo o código.
 
     Returns:
-        Tuple[Dict[int, Set[int]], int, List[int]]: Grafo (G, 1-based),
+        Tuple[Dict[int, Set[int]], int, List[int]]: Grafo (G, 0-based),
                                                    Número total de vértices (V),
-                                                   e Vértices ordenados por grau (decrescente).
+                                                   e Vértices ordenados por grau (decrescente, 0-based).
     """
     G: Dict[int, Set[int]] = {}
     V = 0
-    max_id_lido = 0  # O maior ID lido no arquivo (0-based)
+    max_id_lido = -1  # O maior ID lido no arquivo (0-based)
 
     try:
         with open(file_path, 'r') as f:
@@ -241,18 +252,18 @@ def importar_base1(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]
                     # Se falhar, assume que esta é a primeira linha de dados.
                     break
 
-                    # 2. Leitura e Processamento das Arestas (A partir de data_start_line)
+            # 2. Leitura e Processamento das Arestas (A partir de data_start_line)
             for line in lines[data_start_line:]:
                 parts = line.split()
                 if len(parts) < 2: continue
                 try:
                     u_0based, v_0based = int(parts[0]), int(parts[1])
 
-                    # 💥 CONVERSÃO PARA 1-BASED
-                    u = u_0based + 1
-                    v = v_0based + 1
+                    # 💥 SEM CONVERSÃO PARA 1-BASED
+                    u = u_0based
+                    v = v_0based
 
-                    # Rastreia o ID máximo (agora 1-based)
+                    # Rastreia o ID máximo (agora 0-based)
                     max_id_lido = max(max_id_lido, u, v)
 
                     # Adiciona arestas
@@ -267,10 +278,10 @@ def importar_base1(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]
 
             # 3. Ajuste Final e Inicialização de Vértices
             # Usa o maior valor lido para V, caso o cabeçalho esteja errado ou ausente.
-            V = max(V, max_id_lido)
+            V = max(V, max_id_lido + 1)  # O número de vértices é o max_id + 1 (pois é 0-based)
 
-            # Garante que todos os vértices (1 a V) existam no dicionário G, mesmo se forem isolados.
-            for i in range(1, V + 1):
+            # Garante que todos os vértices (0 a V-1) existam no dicionário G, mesmo se forem isolados.
+            for i in range(V):  # Loop de 0 a V-1
                 if i not in G: G[i] = set()
 
     except FileNotFoundError:
@@ -278,11 +289,12 @@ def importar_base1(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]
         return {}, 0, []
 
     # 4. Ordenação dos Vértices (Heurística de Busca por Grau Decrescente)
-    vertex_degrees = [(len(G.get(u_id, set())), u_id) for u_id in range(1, V + 1)]
+    vertex_degrees = [(len(G.get(u_id, set())), u_id) for u_id in range(V)]  # Loop de 0 a V-1
     vertex_degrees.sort(key=lambda x: x[0], reverse=True)
     ordered_vertices = [u_id for degree, u_id in vertex_degrees]
 
     return G, V, ordered_vertices
+
 
 def recuperar_lista_arquivos(nome_pasta: str):
     """
@@ -318,7 +330,8 @@ def recuperar_lista_arquivos(nome_pasta: str):
         print(f"Ocorreu um erro: {e}")
         return []
 
-def exportar_excel(nome_arquivo: str = 'resultados.xlsx', sheet_name: str = 'Resultados B&B'):
+
+def exportar_excel(nome_arquivo, sheet_name: str):
     """
         Exporta o conteúdo da lista global RESULTADOS_GRAFOS_BRANCH_AND_BOUND
         para um arquivo Excel.
@@ -335,12 +348,14 @@ def exportar_excel(nome_arquivo: str = 'resultados.xlsx', sheet_name: str = 'Res
 
     try:
         # 1. Cria o DataFrame do Pandas a partir da lista de tuplas global
-        df = pd.DataFrame(RESULTADOS, columns=['Algoritmo', 'Com lower bound?', 'Com upper bound?', 'Grafo', 'Peso', 'Segundos', 'Vértices com peso'])
+        df = pd.DataFrame(RESULTADOS,
+                          columns=['Algoritmo', 'Com lower bound?', 'Com upper bound?', 'Grafo', 'Peso', 'Segundos',
+                                   'Vértices com peso'])
 
         # 2. Exporta o DataFrame para o Excel
         # index=False: Evita que o índice numérico padrão do Pandas seja escrito no Excel.
         df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='openpyxl')
-        #df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='xlsxwriter')
+        # df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='xlsxwriter')
 
         print("\n" + "=" * 50)
         print(f"🎉 Exportação concluída com sucesso!")
@@ -353,15 +368,19 @@ def exportar_excel(nome_arquivo: str = 'resultados.xlsx', sheet_name: str = 'Res
     except Exception as e:
         print(f"❌ Ocorreu um erro durante a exportação: {e}")
 
-def adicionar_resultado(tecnica: str, is_lower_bound: bool, is_upper_bound: bool, nome_grafo: str, peso_encontrado: int, tempo: float, vertices_selecionados: []):
+
+def adicionar_resultado(tecnica: str, is_lower_bound: bool, is_upper_bound: bool, nome_grafo: str, peso_encontrado: int,
+                        tempo: float, vertices_selecionados: []):
     """
     Adiciona o nome do grafo e o peso calculado à lista global.
     """
     global RESULTADOS
 
     # Adiciona o novo resultado como uma tupla (nome, peso)
-    RESULTADOS.append((tecnica, is_lower_bound, is_upper_bound, nome_grafo, peso_encontrado, tempo, vertices_selecionados))
-    #print(f"Resultado adicionado: Grafo '{nome_grafo}', Peso: {peso_encontrado}")
+    RESULTADOS.append(
+        (tecnica, is_lower_bound, is_upper_bound, nome_grafo, peso_encontrado, tempo, vertices_selecionados))
+    # print(f"Resultado adicionado: Grafo '{nome_grafo}', Peso: {peso_encontrado}")
+
 
 def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
     """
@@ -370,7 +389,7 @@ def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
     if melhores_estados is None:
         print("\n❌ Solução não encontrada ou grafo inviável (o B&B pode ter sido parado cedo).")
         print(f"Tempo de Execução: {tempo_total:.2f} segundos")
-        return
+        return []
 
     print("DOMINAÇÃO ROMANA TOTAL")
     print(f"Menor peso: {melhor_peso}")
@@ -379,7 +398,7 @@ def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
     # Filtra e formata apenas os vértices com peso 1 ou 2
     vertices_selecionados = []
     for i, peso in enumerate(BEST_STATES):
-        vertice_id = i + 1
+        vertice_id = i  # Usa 1-based para exibição ao usuário
         if peso in (1, 2):
             vertices_selecionados.append(f"v{vertice_id}: {peso}")
 
@@ -398,9 +417,15 @@ def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
 
     return vertices_selecionados
 
+
 # ======================================================================
 # PRÉ-PROCESSAMENTO
 # ======================================================================
+
+def reinicializar_resultados():
+    global RESULTADOS
+    RESULTADOS = []
+
 
 def vertices_isolados(G: Dict[int, Set[int]]) -> bool:
     """
@@ -413,7 +438,7 @@ def vertices_isolados(G: Dict[int, Set[int]]) -> bool:
     tornando o problema insolúvel (peso infinito) na prática.
 
     Args:
-        G (Dict[int, Set[int]]): O grafo representado como lista de adjacência.
+        G (Dict[int, Set[int]]): O grafo representado como lista de adjacência (0-based).
 
     Returns:
         bool: True se houver vértices isolados, False caso contrário.
@@ -424,25 +449,27 @@ def vertices_isolados(G: Dict[int, Set[int]]) -> bool:
 
     return False
 
+
 def atribuicao_valida(G: Dict[int, Set[int]], estados: List[Optional[int]]) -> bool:
     """
     Verifica se a atribuição parcial em V_A já viola as regras C1/C2 de forma irreparável.
+    O Grafo (G) e os Estados (estados) são 0-based.
 
     A inviabilidade ocorre se um vértice (em V_A ou V_U) não for dominável, mesmo que todos
     os vértices em V_U sejam atribuídos com o peso máximo (2).
 
     Args:
-        G (Dict[int, Set[int]]): O grafo.
-        estados (List[Optional[int]]): Estado parcial ou final de atribuição de pesos.
+        G (Dict[int, Set[int]]): O grafo (0-based).
+        estados (List[Optional[int]]): Estado parcial ou final de atribuição de pesos (0-based).
 
     Returns:
         bool: True se o estado parcial é inviável.
     """
     V = len(estados)
 
-    # PERCORRE TODOS OS VÉRTICES V
+    # PERCORRE TODOS OS VÉRTICES V (ÍNDICES DE 0 A V-1)
     for u_index in range(V):
-        u_id = u_index + 1
+        u_id = u_index  # O ID é o próprio índice (0-based)
         val = estados[u_index]
 
         # 1. VERIFICAÇÃO DE VÉRTICES JÁ ATRIBUÍDOS (V_A)
@@ -451,39 +478,104 @@ def atribuicao_valida(G: Dict[int, Set[int]], estados: List[Optional[int]]) -> b
             # Restrição C1: u com valor 0. Precisa de vizinho com valor 2.
             if val == 0:
                 # Checa se C1 é SATISFEITO por V_A
-                is_c1_satisfied_by_Va = any(estados[v - 1] == 2 for v in G[u_id] if estados[v - 1] is not None)
+                is_c1_satisfied_by_Va = any(estados[v] == 2 for v in G[u_id] if estados[v] is not None)
 
                 if not is_c1_satisfied_by_Va:
                     # Se C1 falhou em V_A, verifica se há esperança em V_U.
-                    has_neighbor_in_Vu = any(estados[v - 1] is None for v in G[u_id])
+                    has_neighbor_in_Vu = any(estados[v] is None for v in G[u_id])
                     if not has_neighbor_in_Vu:
                         return True  # Inviável: C1 falhou e não há vizinhos em V_U para receber peso 2.
 
             # Restrição C2: u com valor 1 ou 2. Precisa de vizinho com valor 1 ou 2.
             elif val in (1, 2):
                 # Checa se C2 é SATISFEITO por V_A
-                is_c2_satisfied_by_Va = any(estados[v - 1] in (1, 2) for v in G[u_id] if estados[v - 1] is not None)
+                is_c2_satisfied_by_Va = any(estados[v] in (1, 2) for v in G[u_id] if estados[v] is not None)
 
                 if not is_c2_satisfied_by_Va:
                     # Se C2 falhou em V_A, verifica se há esperança em V_U.
-                    has_neighbor_in_Vu = any(estados[v - 1] is None for v in G[u_id])
+                    has_neighbor_in_Vu = any(estados[v] is None for v in G[u_id])
                     if not has_neighbor_in_Vu:
                         return True  # Inviável: C2 falhou e não há vizinhos em V_U para receber peso 1 ou 2.
 
         # 2. VERIFICAÇÃO DE VÉRTICES NÃO ATRIBUÍDOS (V_U)
         if val is None:
             # Se u está em V_U, checamos se seus vizinhos em V_A já o condenaram.
-            all_neighbors_in_Va = all(estados[v_id - 1] is not None for v_id in G[u_id])
+            all_neighbors_in_Va = all(estados[v_id] is not None for v_id in G[u_id])
 
             if all_neighbors_in_Va:
-                # Se u só tem vizinhos em V_A, ele deve ser dominado (C2) por V_A.
-                has_v12_neighbor_in_Va = any(estados[v_id - 1] in (1, 2) for v_id in G[u_id])
 
-                if not has_v12_neighbor_in_Va:
-                    # u_id (em V_U) não é dominado por V_A (C2), e não há esperança em V_U.
-                    return True
+                # C1: Checa se u pode receber 0. Precisa de vizinho V_A=2
+                has_v2_neighbor_in_Va = any(estados[v_id] == 2 for v_id in G[u_id])
+
+                if not has_v2_neighbor_in_Va:
+                    # Se u não tem vizinho V_A=2, ele não pode receber peso 0 no futuro.
+                    # Ele deve receber peso 1 ou 2. (Mínimo de $v(u)=1$)
+                    # Neste caso, u precisa ser dominado por um vizinho V_A>=1 (Restrição C2)
+
+                    # C2: Checa se u, ao receber peso 1 ou 2, é dominado por um vizinho V_A>=1
+                    has_v12_neighbor_in_Va = any(estados[v_id] in (1, 2) for v_id in G[u_id])
+
+                    if not has_v12_neighbor_in_Va:
+                        # u não é dominado por V_A>=1 (C2) e também não é dominado por V_A=2 (C1).
+                        # Mesmo que u receba 1 ou 2, ele falhará na Restrição C2.
+                        return True  # Inviável!
 
     return False
+
+
+def validar_solucao_final(G: Dict[int, Set[int]], solucao: List[int]) -> bool:
+    """
+    Verifica se uma solução completa respeita estritamente as regras da DRT.
+    Útil para auditar o resultado final do algoritmo.
+
+    Args:
+        G: O grafo (dicionário de adjacência 0-based).
+        solucao: Lista de pesos atribuídos (0-based).
+
+    Returns:
+        bool: True se válida, False se inválida (com prints do erro).
+    """
+    valida = True
+
+    # Itera sobre todos os vértices do grafo (keys são 0-based)
+    for u_id in G:
+        peso_u = solucao[u_id]  # u_id é o índice (0-based)
+        vizinhos = G[u_id]
+
+        # REGRA C1: Se peso é 0, DEVE ter um vizinho com peso 2
+        if peso_u == 0:
+            tem_vizinho_2 = False
+            for v_id in vizinhos:
+                if solucao[v_id] == 2:  # v_id é o índice (0-based)
+                    tem_vizinho_2 = True
+                    break
+
+            if not tem_vizinho_2:
+                # Exibe o ID do vértice como 1-based para o usuário (u_id + 1)
+                print(f"❌ ERRO C1 no Vértice {u_id + 1}: Tem peso 0 mas NENHUM vizinho com peso 2.")
+                valida = False
+
+        # REGRA C2: Se peso > 0 (1 ou 2), DEVE ter um vizinho com peso > 0
+        elif peso_u > 0:  # 1 ou 2
+            tem_vizinho_positivo = False
+            for v_id in vizinhos:
+                if solucao[v_id] > 0:  # v_id é o índice (0-based)
+                    tem_vizinho_positivo = True
+                    break
+
+            if not tem_vizinho_positivo:
+                # Exibe o ID do vértice como 1-based para o usuário (u_id + 1)
+                print(
+                    f"❌ ERRO C2 no Vértice {u_id + 1}: Tem peso {peso_u} mas está ISOLADO de outros pesos positivos (vizinhos são todos 0).")
+                valida = False
+
+    if valida:
+        print("✅ Solução validada com sucesso!")
+    else:
+        print("⚠️ A solução apresentada é INVÁLIDA.")
+
+    return valida
+
 
 # ======================================================================
 # Lower bound
@@ -493,15 +585,15 @@ def lower_bound(G: Dict[int, Set[int]], estados: List[Optional[int]], current_we
     """
     Calcula o Lower Bound (LB) para a Dominação Romana Total, respeitando
     a restrição de que nenhum vértice com peso >= 1 pode ser isolado (deve ter vizinho >= 1).
+    O Grafo (G) e os Estados (estados) são 0-based.
     """
     lower_bound = current_weight
     V = len(estados)
-    V_U = {i + 1 for i, val in enumerate(estados) if val is None}
+    V_U = {i for i, val in enumerate(estados) if val is None}  # V_U contém índices 0-based
     total_min_demand = 0.0
 
-    for v_id in range(1, V + 1):
-        v_index = v_id - 1
-        v_val = estados[v_index]
+    for v_id in range(V):  # v_id é o índice (0-based)
+        v_val = estados[v_id]
         N_v = G.get(v_id, set())
 
         # 1. Vértices vizinhos em V_U (potenciais doadores de peso)
@@ -509,7 +601,7 @@ def lower_bound(G: Dict[int, Set[int]], estados: List[Optional[int]], current_we
         count_N_v_U = len(N_v_U)
 
         # 2. Vértices vizinhos em V_A com peso >= 1 (Guarnições existentes)
-        N_v_VA_guarrison = {w for w in N_v if estados[w - 1] is not None and estados[w - 1] >= 1}
+        N_v_VA_guarrison = {w for w in N_v if estados[w] is not None and estados[w] >= 1}
 
         # Se um nó em V_A precisa de correção, mas não tem vizinhos em V_U, o ramo é inviável
         # (Assumimos que 'verificar_inviabilidade_local' já trata isso).
@@ -520,7 +612,7 @@ def lower_bound(G: Dict[int, Set[int]], estados: List[Optional[int]], current_we
 
         # Regra 1: Demanda de Vértices V_A com peso 0 (Exigem w=2 - C1)
         if v_val == 0:
-            if not any(estados[w - 1] == 2 for w in N_v_VA_guarrison):
+            if not any(estados[w] == 2 for w in N_v_VA_guarrison):
                 # Não é reforçado por um vizinho V_A=2, exige w=2 de V_U
                 if count_N_v_U > 0:
                     total_min_demand += 2.0 / count_N_v_U
@@ -548,10 +640,12 @@ def lower_bound(G: Dict[int, Set[int]], estados: List[Optional[int]], current_we
 
     return lower_bound
 
+
 def lower_bound_future(G: Dict[int, Set[int]], estados: List[Optional[int]], V_U_indices: List[int]) -> int:
     """
     Calcula o custo mínimo futuro (L_future) para cobrir os vértices não atribuídos (V_U).
     Utiliza o Lower Bound mais forte entre as heurísticas relaxadas (Trivial, MIS, C1).
+    O Grafo (G) e os Estados (estados) são 0-based.
     """
 
     if not V_U_indices:
@@ -570,21 +664,21 @@ def lower_bound_future(G: Dict[int, Set[int]], estados: List[Optional[int]], V_U
 
     # Encontrar um Conjunto Independente I em G[V_U] (Simplificado)
     for u_index in V_U_indices:
-        u_id = u_index + 1
+        u_id = u_index  # O ID é o índice 0-based
         # Verifica se o vizinho não atribuído é independente em relação ao MIS já formado
-        is_independent = all(v_id - 1 not in I_indices for v_id in G[u_id] if v_id - 1 in V_U_set)
+        is_independent = all(v_id not in I_indices for v_id in G[u_id] if v_id in V_U_set)
         if is_independent:
             I_indices.append(u_index)
 
     # Calcular o Custo Relaxado L_mis para o MIS (I)
     L_mis = 0
     for u_index in I_indices:
-        u_id = u_index + 1
+        u_id = u_index  # O ID é o índice 0-based
 
         # Custo mínimo para cobrir u_id, dado o estado PARCIAL de V_A.
         # u_id precisa ser dominado por v>=1 E, se u_id for 0, por v=2.
-        has_Va_2 = any(estados[v - 1] == 2 for v in G[u_id] if estados[v - 1] is not None)
-        has_Va_12 = any(estados[v - 1] in (1, 2) for v in G[u_id] if estados[v - 1] is not None)
+        has_Va_2 = any(estados[v] == 2 for v in G[u_id] if estados[v] is not None)
+        has_Va_12 = any(estados[v] in (1, 2) for v in G[u_id] if estados[v] is not None)
 
         # Custos mínimos para u_id ser 0, 1 ou 2, considerando as restrições C1 e C2 em V_A.
         cost_0 = 0 if has_Va_2 else float('inf')
@@ -603,9 +697,9 @@ def lower_bound_future(G: Dict[int, Set[int]], estados: List[Optional[int]], V_U
     # O aperto mais simples é contar o número de nós que precisam de um '2' urgente.
     c1_penalty = 0
     for u_index in V_U_indices:
-        u_id = u_index + 1
+        u_id = u_index  # O ID é o índice 0-based
         # Verifica se u_id (em V_U) é dominado por um v=2 em V_A
-        has_v2_neighbor_in_Va = any(estados[v - 1] == 2 for v in G[u_id] if estados[v - 1] is not None)
+        has_v2_neighbor_in_Va = any(estados[v] == 2 for v in G[u_id] if estados[v] is not None)
 
         if not has_v2_neighbor_in_Va:
             # Se não for dominado por v=2, ele ou um vizinho em V_U PRECISA de peso 1 ou 2.
@@ -617,6 +711,7 @@ def lower_bound_future(G: Dict[int, Set[int]], estados: List[Optional[int]], V_U
 
     return L_total
 
+
 # ======================================================================
 # Upper Bound
 # ======================================================================
@@ -624,6 +719,7 @@ def lower_bound_future(G: Dict[int, Set[int]], estados: List[Optional[int]], V_U
 def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> Tuple[List[int], int]:
     """
     Heurística gulosa construtiva para encontrar uma Dominação Romana Total (DRT) válida.
+    O Grafo (G) e os Vértices Ordenados são 0-based.
 
     A heurística foca em satisfazer C2 (dominação por peso >= 1) e depois C1 (ajuste por peso = 2).
     A ordem de visitação dos vértices influencia a qualidade do resultado.
@@ -637,11 +733,11 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
 
     # Passo 1: Satisfação C2 (Dominação Simples)
     # Percorre os vértices em ordem (decrescente de grau ou aleatória).
-    for u_id in ordered_vertices:
-        u_index = u_id - 1
+    for u_id in ordered_vertices:  # u_id é o índice 0-based
+        u_index = u_id  # O índice é o próprio ID
 
         # Verifica se o nó u_id já é dominado por um vizinho com peso 1 ou 2.
-        is_dominated_by_neighbor = any(estados_guloso[v_id - 1] in (1, 2) for v_id in G[u_id])
+        is_dominated_by_neighbor = any(estados_guloso[v_id] in (1, 2) for v_id in G[u_id])
 
         # Se u_id não for dominado e seu peso atual for < 1, força v(u)=1.
         if not is_dominated_by_neighbor and estados_guloso[u_index] < 1:
@@ -650,12 +746,12 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
 
     # Passo 2: Satisfação C1 (Ajuste para Dominação Romana)
     # Agora, garante que todos os nós com peso 0 sejam dominados por um vizinho com peso 2.
-    for u_id in range(1, V + 1):
-        u_index = u_id - 1
+    for u_id in range(V):  # u_id é o índice 0-based
+        u_index = u_id  # O índice é o próprio ID
 
         if estados_guloso[u_index] == 0:
             # Verifica se C1 está satisfeito (vizinho com peso 2)
-            has_v2_neighbor = any(estados_guloso[v_id - 1] == 2 for v_id in G[u_id])
+            has_v2_neighbor = any(estados_guloso[v_id] == 2 for v_id in G[u_id])
 
             if not has_v2_neighbor:
                 # C1 falhou. É preciso aumentar o peso de um vizinho para 2.
@@ -663,7 +759,7 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
                 max_degree_change = -1  # Heurística: Prioriza o vizinho de maior grau
 
                 for v_id in G[u_id]:
-                    v_index = v_id - 1
+                    v_index = v_id  # O índice é o próprio ID
 
                     # Custo para subir para 2 (de 0 ou 1)
                     cost_to_2 = 2 - estados_guloso[v_index]
@@ -676,7 +772,7 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
 
                 # Realiza o ajuste (Atribui o vizinho de maior grau a 2)
                 if best_neighbor_id is not None:
-                    best_neighbor_index = best_neighbor_id - 1
+                    best_neighbor_index = best_neighbor_id  # O índice é o próprio ID
                     cost_increase = 2 - estados_guloso[best_neighbor_index]
 
                     estados_guloso[best_neighbor_index] = 2
@@ -685,18 +781,17 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
     # --- NOVO PASSO 3: SATISFAÇÃO DA RESTRIÇÃO DE CONECTIVIDADE (VÉRTICES >= 1 NÃO ISOLADOS) ---
 
     # Re-verifica todos os vértices para garantir que os vértices com peso >= 1 estejam conectados.
-    # V é o número total de vértices
     V = len(G)
-    for v_id in range(1, V + 1):
-        v_index = v_id - 1
+    for v_id in range(V):  # v_id é o índice 0-based
+        v_index = v_id  # O índice é o próprio ID
 
         # 1. Verifica se o vértice v TEM peso >= 1
         if estados_guloso[v_index] >= 1:
 
             # 2. Verifica se ele TEM um vizinho w com peso >= 1
             has_v1_neighbor = False
-            for w_id in G[v_id]:  # Itera sobre os vizinhos
-                if estados_guloso[w_id - 1] >= 1:
+            for w_id in G[v_id]:  # w_id é o índice 0-based
+                if estados_guloso[w_id] >= 1:
                     has_v1_neighbor = True
                     break
 
@@ -711,7 +806,7 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
                 max_degree = -1
 
                 for w_id in G[v_id]:
-                    w_index = w_id - 1
+                    w_index = w_id  # O índice é o próprio ID
                     # Só podemos modificar vértices que ainda estão com peso 0
                     if estados_guloso[w_index] == 0:
                         current_degree = len(G.get(w_id, set()))
@@ -721,28 +816,18 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
 
                 # Aplica a correção: Atribui 1 ao vizinho escolhido
                 if best_neighbor_id is not None:
-                    best_neighbor_index = best_neighbor_id - 1
+                    best_neighbor_index = best_neighbor_id  # O índice é o próprio ID
                     estados_guloso[best_neighbor_index] = 1  # Atribui peso 1
                     current_weight += 1
 
-    # A função greedy_romana_domination deve retornar o current_weight e estados_guloso
-    #return current_weight, estados_guloso
-
     return estados_guloso, current_weight
+
 
 def peso_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: int = 10) -> Tuple[
     int, List[int]]:
     """
     Executa a heurística gulosa múltiplas vezes com ordens de vértices diferentes
     para encontrar um Upper Bound (U) inicial de alta qualidade para o B&B.
-
-    Args:
-        G (Dict[int, Set[int]]): O grafo.
-        ordered_vertices (List[int]): Vértices ordenados por grau (primeira tentativa).
-        attempts (int): Número de execuções da heurística.
-
-    Returns:
-        Tuple[int, List[int]]: O melhor peso Upper Bound encontrado e o estado correspondente.
     """
     best_u = float('inf')
     best_states = None
@@ -770,6 +855,7 @@ def peso_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: i
 
     return int(best_u), best_states
 
+
 # ======================================================================
 # FUNÇÕES DE RAMIFICAÇÃO (Branch and Bound)
 # ======================================================================
@@ -783,8 +869,9 @@ def bb_recursive(G: Dict[int, Set[int]],
                  is_lower_bound: bool):
     """
     Função recursiva principal (DFS) do Branch and Bound.
+    O Grafo (G) e os Estados (estados) são 0-based.
 
-    Esta função explora o espaço de busca, podando ramos inviáveis ou não-promissores.
+    Esta função explora o espaço de busca, podando ramos inviáveis ou não-promissoros.
 
     Args:
         G, V: Grafo e número de vértices.
@@ -797,7 +884,7 @@ def bb_recursive(G: Dict[int, Set[int]],
     global BEST_STATES
 
     # Log do peso
-    #print(f"Melhor: {BEST_WEIGHT}, Atual: {current_weight} ")
+    # print(f"Melhor: {BEST_WEIGHT}, Atual: {current_weight} ")
 
     # 1. CRITÉRIO DE PARADA: Solução Completa
     # Se todos os vértices foram atribuídos (o índice passou do último vértice),
@@ -812,7 +899,7 @@ def bb_recursive(G: Dict[int, Set[int]],
                 BEST_STATES = list(estados)
 
                 # Log de mudança de valor
-                #print(f"Peso atualizado: {BEST_WEIGHT}")
+                # print(f"Peso atualizado: {BEST_WEIGHT}")
 
         return
 
@@ -820,11 +907,11 @@ def bb_recursive(G: Dict[int, Set[int]],
     # Se o estado parcial for irreparavelmente inviável (ex: nó atribuído=0 sem vizinho=2 em V_A),
     # o custo é infinito e o ramo é podado.
     if atribuicao_valida(G, estados):
-        return True, float('inf')
+        return
 
     # 2. RAMIFICAÇÃO (Para o vértice atual 'u')
-    u_id = ordered_vertices[list_index]  # ID do vértice (1-based)
-    u_index = u_id - 1  # Índice do vértice (0-based)
+    u_id = ordered_vertices[list_index]  # ID do vértice (0-based)
+    u_index = u_id  # O índice é o próprio ID (0-based)
 
     # A ordem de ramificação (2, 1, 0) é uma heurística para encontrar bons bounds
     # mais rapidamente, priorizando pesos mais altos.
@@ -839,18 +926,22 @@ def bb_recursive(G: Dict[int, Set[int]],
             continue
 
         if is_lower_bound:
+            # O lower_bound é calculado apenas para o futuro V_U, por isso new_weight é somado separadamente
             if lower_bound(G, new_estados, 0) + new_weight >= BEST_WEIGHT:
                 continue
-            #if new_weight + lower_bound_future(G, new_estados, new_estados) >= BEST_WEIGHT:
+            # if new_weight + lower_bound_future(G, new_estados, new_estados) >= BEST_WEIGHT:
             #    continue
 
         bb_recursive(G, V, ordered_vertices, new_estados, new_weight, list_index + 1, is_lower_bound)
 
-def branch_and_bound(G: Dict[int, Set[int]], ordered_vertices: List[int], is_lower_bound: bool, is_upper_bound: bool) -> Tuple[
+
+def branch_and_bound(G: Dict[int, Set[int]], ordered_vertices: List[int], is_lower_bound: bool, is_upper_bound: bool) -> \
+Tuple[
     Optional[List[int]], Optional[int]]:
     """
     Função wrapper para inicializar o Branch and Bound (B&B).
     Define o Upper Bound inicial e inicia a busca recursiva.
+    O Grafo (G) e os Vértices Ordenados são 0-based.
 
     Returns:
         Tuple[Optional[List[int]], Optional[int]]: O melhor estado e o melhor peso encontrados.
@@ -868,9 +959,11 @@ def branch_and_bound(G: Dict[int, Set[int]], ordered_vertices: List[int], is_low
         BEST_WEIGHT = best_u
         BEST_STATES = best_u_states
 
+        """
         print("---------------------------------------------------------")
         print(f"UPPER BOUND (U) GULOSO INICIAL: {BEST_WEIGHT}")
         print("---------------------------------------------------------")
+        """
 
     # Inicializa o estado B&B (todos os vértices não atribuídos = None)
     estados_iniciais = [None] * V
@@ -879,6 +972,7 @@ def branch_and_bound(G: Dict[int, Set[int]], ordered_vertices: List[int], is_low
     bb_recursive(G, V, ordered_vertices, estados_iniciais, 0, 0, is_lower_bound)
 
     return BEST_STATES, BEST_WEIGHT
+
 
 def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_upper_bound: bool):
     """Função principal que gerencia o fluxo de execução, mede o tempo e apresenta os resultados."""
@@ -891,8 +985,8 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
     local_arquivo = pasta + arquivo
 
     # Diferença para indicar se o índice do grafo começa em 0 ou 1
-    #G, V, vertices_ordenados = importar_base0(local_arquivo)
-    G, V, vertices_ordenados = importar_base1(local_arquivo)
+    # Chamando importar_base0 para arquivos que são 0-based (como o grafo-40-1-0.3.txt)
+    G, V, vertices_ordenados = importar_base0(local_arquivo)
 
     # 2. PRÉ-PROCESSAMENTO: VERIFICAÇÃO DE VÉRTICES ISOLADOS
     if vertices_isolados(G):
@@ -917,7 +1011,14 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
 
     melhores_estados, melhor_peso = branch_and_bound(G, vertices_ordenados, is_lower_bound, is_upper_bound)
 
-    # 3. Execução e Medição de Tempo
+    # Verificação final só é possível se houver um estado (o guloso inicializa, mas o B&B puro pode não)
+    if melhores_estados:
+        # A validação final verifica o melhor estado encontrado.
+        if not validar_solucao_final(G, melhores_estados):
+            # Se a solução for inválida, é um erro no B&B, e não deve prosseguir
+            return
+
+    # 3. Continuação da Execução e Medição de Tempo
     end_time = time.perf_counter()
     tempo_total = end_time - start_time
 
@@ -925,10 +1026,13 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
     vertices_selecionados = impressao_resultado(melhores_estados, melhor_peso, tempo_total)
 
     # 5. Adiciona o resultado para uma lista de exportação
-    adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, melhor_peso, round(tempo_total, 2), vertices_selecionados)
+    adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, melhor_peso, round(tempo_total, 2),
+                        vertices_selecionados)
 
     # 6. Plotagem do Grafo
-    plotar_grafico(G, BEST_STATES, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
+    if BEST_STATES:  # Só plota se tiver um resultado válido
+        plotar_grafico(G, BEST_STATES, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
+
 
 # ======================================================================
 # Dominação por atribuição direta - Estratégia gulosa
@@ -954,9 +1058,8 @@ def dominacao_por_atribuicao_direta(tecnica: str, arquivo: str, pasta: str, is_l
     _, extensao = os.path.splitext(arquivo)
     local_arquivo = pasta + arquivo
 
-    # Diferença para indicar se o índice do grafo começa em 0 ou 1
-    # G, V, vertices_ordenados = importar_base0(local_arquivo)
-    G, V, vertices_ordenados = importar_base1(local_arquivo)
+    # Chamando importar_base0 para arquivos que são 0-based
+    G, V, vertices_ordenados = importar_base0(local_arquivo)
 
     # 2. PRÉ-PROCESSAMENTO: VERIFICAÇÃO DE VÉRTICES ISOLADOS
     if vertices_isolados(G):
@@ -981,10 +1084,15 @@ def dominacao_por_atribuicao_direta(tecnica: str, arquivo: str, pasta: str, is_l
 
     melhores_estados, melhor_peso = upper_bound_guloso(G, vertices_ordenados)
 
-    BEST_STATES = melhor_peso
+    # A validação final verifica o melhor estado encontrado.
+    if not validar_solucao_final(G, melhores_estados):
+        return
+
+    # Atualiza as globais para a plotagem
+    BEST_WEIGHT = melhor_peso
     BEST_STATES = melhores_estados
 
-    # 3. Execução e Medição de Tempo
+    # 3. Continuação da Execução e Medição de Tempo
     end_time = time.perf_counter()
     tempo_total = end_time - start_time
 
@@ -998,25 +1106,53 @@ def dominacao_por_atribuicao_direta(tecnica: str, arquivo: str, pasta: str, is_l
     # 6. Plotagem do Grafo
     plotar_grafico(G, BEST_STATES, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
 
+
 # ======================================================================
 # EXECUÇÃO DO SCRIPT
 # ======================================================================
 
-#pasta: str
 pasta = "grafos\\"
 
 # Recuperação da lista de arquivos
 arquivos_encontrados = recuperar_lista_arquivos(pasta)
 if arquivos_encontrados:
     print(f"✅ Arquivos encontrados em {pasta}:")
-    #for arquivo in arquivos_encontrados:
+    # for arquivo in arquivos_encontrados:
     #    print(f"{arquivo}")
 else:
     print("❌ Não foram encontrados arquivos, ou a pasta não existe.")
 
-# Operação de dominação romana
+# Operação BB pura
 for grafo in arquivos_encontrados:
-    #dominacao('B&B', grafo, pasta, False, False)
+    dominacao('B&B', grafo, pasta, False, False)
+
+exportar_excel("resultado_bb.xls", "Resultado")
+reinicializar_resultados()
+
+# Operação BB lower bound
+for grafo in arquivos_encontrados:
+    dominacao('B&B', grafo, pasta, True, False)
+
+exportar_excel("resultado_bb_LB.xls", "Resultado LB")
+reinicializar_resultados()
+
+# Operação BB upper bound
+for grafo in arquivos_encontrados:
+    dominacao('B&B', grafo, pasta, False, True)
+
+exportar_excel("resultado_bb_UB.xls", "Resultado UB")
+reinicializar_resultados()
+
+# Operação BB lower bound e upper bound
+for grafo in arquivos_encontrados:
+    dominacao('B&B', grafo, pasta, True, True)
+
+exportar_excel("resultado_bb_LB_UB.xls", "Resultado LB UB")
+reinicializar_resultados()
+
+# Operação Atribuição direta
+for grafo in arquivos_encontrados:
     dominacao_por_atribuicao_direta('Atribuição', grafo, pasta, False, False)
 
-exportar_excel()
+exportar_excel("resultado_atribuicao.xls", "Resultado Atribuição")
+reinicializar_resultados()
