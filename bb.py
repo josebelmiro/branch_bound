@@ -8,6 +8,8 @@ import pandas as pd
 
 from typing import Dict, Set, List, Optional, Tuple
 
+from scipy.stats import false_discovery_control
+
 # from turtle import pd
 
 # Variáveis Globais para armazenar a Melhor Solução Encontrada (Upper Bound)
@@ -62,9 +64,9 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: in
         upper = "UB"
 
     if extensao.lower() == '.mtx':
-        graph_name = os.path.basename(arquivo).replace(".mtx", f"_{tecnica}_{lower}_{upper}.png")
+        graph_name = os.path.basename(arquivo).replace(".mtx", f" {tecnica}.png")
     elif extensao.lower() == '.txt':
-        graph_name = os.path.basename(arquivo).replace(".txt", f"_{tecnica}_{lower}_{upper}.png")
+        graph_name = os.path.basename(arquivo).replace(".txt", f" {tecnica}.png")
 
     filename = os.path.join(output_dir, graph_name)
 
@@ -125,7 +127,7 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: in
                                 font_size=10, font_color='black')
 
     plt.title(F"Dominação Romana Total: {arquivo}\n"
-              F"{tecnica} ({lower} {upper}) - Peso total: {peso}\n"
+              F"{tecnica} - Peso total: {peso}\n"
               F"Pesos 1 e 2 em vermelho")
     plt.axis('off')
 
@@ -213,7 +215,7 @@ def importar_base1(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]
 def importar_base0(file_path: str) -> Tuple[Dict[int, Set[int]], int, List[int]]:
     """
     Importa um grafo a partir de um arquivo de lista de arestas (0-based)
-    com cabeçalho simples (V V E), como o formato 'grafo-70-0-0.7.txt'.
+    com cabeçalho simples (V V E), como o formato 'grafo-vv-n-0.p.txt'.
 
     O Grafo e os vértices são mantidos em 0-based para todo o código.
 
@@ -346,6 +348,17 @@ def exportar_excel(nome_arquivo, sheet_name: str):
         print("⚠️ A lista de resultados está vazia. Nenhuma exportação para Excel realizada.")
         return
 
+    nome_pasta = "resultados"
+
+    # 1. Cria a pasta se ela não existir
+    if not os.path.exists(nome_pasta):
+        os.makedirs(nome_pasta)
+        print(f"📁 Pasta '{nome_pasta}' criada com sucesso.")
+
+    # 2. Cria o caminho completo (ex: resultados/meu_arquivo.xlsx)
+    # O os.path.join garante que as barras (/ ou \) fiquem corretas p/ o seu sistema
+    caminho_completo = os.path.join(nome_pasta, nome_arquivo)
+
     try:
         # 1. Cria o DataFrame do Pandas a partir da lista de tuplas global
         df = pd.DataFrame(RESULTADOS,
@@ -354,13 +367,15 @@ def exportar_excel(nome_arquivo, sheet_name: str):
 
         # 2. Exporta o DataFrame para o Excel
         # index=False: Evita que o índice numérico padrão do Pandas seja escrito no Excel.
-        df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='openpyxl')
+        #df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='openpyxl')
         # df.to_excel(nome_arquivo, index=False, sheet_name=sheet_name, engine='xlsxwriter')
+        # Usa o caminho_completo no to_excel
+        df.to_excel(caminho_completo, index=False, sheet_name=sheet_name, engine='openpyxl')
 
-        print("\n" + "=" * 50)
+        print("=" * 57)
         print(f"🎉 Exportação concluída com sucesso!")
-        print(f"Arquivo: '{nome_arquivo}' | Total de {len(df)} registros.")
-        print("=" * 50)
+        print(f"Arquivo: '{nome_arquivo}'\nTotal de {len(df)} registros.")
+        print("=" * 57)
 
     except ImportError:
         print("❌ ERRO: A biblioteca 'openpyxl' (ou 'xlsxwriter') não está instalada.")
@@ -397,14 +412,14 @@ def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
 
     # Filtra e formata apenas os vértices com peso 1 ou 2
     vertices_selecionados = []
-    for i, peso in enumerate(BEST_STATES):
+    for i, peso in enumerate(melhores_estados):
         vertice_id = i  # Usa 1-based para exibição ao usuário
         if peso in (1, 2):
             vertices_selecionados.append(f"v{vertice_id}: {peso}")
 
-    # Impressão formatada em blocos de 10
+    # Impressão formatada em blocos de 6
     if vertices_selecionados:
-        chunk_size = 10
+        chunk_size = 6
         for j in range(0, len(vertices_selecionados), chunk_size):
             linha = " | ".join(vertices_selecionados[j:j + chunk_size])
             print(linha)
@@ -569,10 +584,9 @@ def validar_solucao_final(G: Dict[int, Set[int]], solucao: List[int]) -> bool:
                     f"❌ ERRO C2 no Vértice {u_id + 1}: Tem peso {peso_u} mas está ISOLADO de outros pesos positivos (vizinhos são todos 0).")
                 valida = False
 
-    if valida:
-        print("✅ Solução validada com sucesso!")
-    else:
+    if not valida:
         print("⚠️ A solução apresentada é INVÁLIDA.")
+        #print("✅ Solução validada com sucesso!")
 
     return valida
 
@@ -716,7 +730,7 @@ def lower_bound_future(G: Dict[int, Set[int]], estados: List[Optional[int]], V_U
 # Upper Bound
 # ======================================================================
 
-def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> Tuple[List[int], int]:
+def atribuicao_direta_gulosa(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> Tuple[List[int], int]:
     """
     Heurística gulosa construtiva para encontrar uma Dominação Romana Total (DRT) válida.
     O Grafo (G) e os Vértices Ordenados são 0-based.
@@ -822,10 +836,10 @@ def upper_bound_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int]) -> T
 
     return estados_guloso, current_weight
 
-
-def peso_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: int = 10) -> Tuple[
-    int, List[int]]:
+def n_rodadas_gulosas(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: int = 10) -> Tuple[List[int], int]:
     """
+    Em testes práticos com n = 10, 20, 30, 40, 50 e 100 o resultado nunca consegue ser melhor que atribuicao_direta_gulosa
+
     Executa a heurística gulosa múltiplas vezes com ordens de vértices diferentes
     para encontrar um Upper Bound (U) inicial de alta qualidade para o B&B.
     """
@@ -842,8 +856,7 @@ def peso_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: i
 
     # Executa a heurística gulosa para cada ordem
     for current_order in orders:
-        states, weight = upper_bound_guloso(G, current_order)
-
+        states, weight = atribuicao_direta_gulosa(G, current_order)
         if weight < best_u:
             best_u = weight
             best_states = states
@@ -853,7 +866,8 @@ def peso_guloso(G: Dict[int, Set[int]], ordered_vertices: List[int], attempts: i
         V = len(G)
         return 2 * V, [2] * V  # Bound seguro, mas alto
 
-    return int(best_u), best_states
+    #return int(best_u), best_states
+    return best_states, int(best_u)
 
 
 # ======================================================================
@@ -884,7 +898,7 @@ def bb_recursive(G: Dict[int, Set[int]],
     global BEST_STATES
 
     # Log do peso
-    # print(f"Melhor: {BEST_WEIGHT}, Atual: {current_weight} ")
+    #print(f"Melhor: {BEST_WEIGHT}, Atual: {current_weight} ")
 
     # 1. CRITÉRIO DE PARADA: Solução Completa
     # Se todos os vértices foram atribuídos (o índice passou do último vértice),
@@ -915,6 +929,7 @@ def bb_recursive(G: Dict[int, Set[int]],
 
     # A ordem de ramificação (2, 1, 0) é uma heurística para encontrar bons bounds
     # mais rapidamente, priorizando pesos mais altos.
+    BRANCHING_ORDER = 0, 1, 2
     for value in BRANCHING_ORDER:
         new_estados = list(estados)
         new_estados[u_index] = value
@@ -953,17 +968,11 @@ Tuple[
     if is_upper_bound:
         # 1. Inicializa o Upper Bound (U) com a solução Gulosa Otimizada
         # Uma boa solução inicial (U) é crucial para a eficácia das podas.
-        best_u, best_u_states = peso_guloso(G, ordered_vertices, attempts=10)
+        best_u_states, best_u = atribuicao_direta_gulosa(G, ordered_vertices)
 
         # Inicializa as variáveis globais do B&B
         BEST_WEIGHT = best_u
         BEST_STATES = best_u_states
-
-        """
-        print("---------------------------------------------------------")
-        print(f"UPPER BOUND (U) GULOSO INICIAL: {BEST_WEIGHT}")
-        print("---------------------------------------------------------")
-        """
 
     # Inicializa o estado B&B (todos os vértices não atribuídos = None)
     estados_iniciais = [None] * V
@@ -974,10 +983,10 @@ Tuple[
     return BEST_STATES, BEST_WEIGHT
 
 
-def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_upper_bound: bool):
+def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_upper_bound: bool, atribuicao_gulosa: bool):
     """Função principal que gerencia o fluxo de execução, mede o tempo e apresenta os resultados."""
     print("---------------------------------------------------------")
-    print(f"Iniciando processamento ({tecnica}) para: {arquivo}")
+    print(f"Iniciando processamento\n{tecnica}\nArquivo: {arquivo}")
     print("---------------------------------------------------------")
 
     # 1. Carregamento e Ordenação do Grafo
@@ -990,11 +999,12 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
 
     # 2. PRÉ-PROCESSAMENTO: VERIFICAÇÃO DE VÉRTICES ISOLADOS
     if vertices_isolados(G):
+        estados_peso_zero = [0] * V
         # Levanta exceção, pois a DRT não é possível (Peso infinito)
-        raise ValueError(
-            "O grafo é inválido para Dominação Romana Total: Contém vértices isolados (grau 0). "
-            "A DRT não pode ser formada."
-        )
+        adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, 0, 0, [])
+        plotar_grafico(G, estados_peso_zero, 0, arquivo, tecnica, is_lower_bound, is_upper_bound)
+        print("O grafo contém vértices isolados e não pode ser dominado")
+        return
 
     if V == 0:
         print("Erro: Grafo não carregado ou vazio.")
@@ -1009,7 +1019,12 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
     BEST_WEIGHT = float('inf')  # Reset para o B&B começar do zero
     BEST_STATES = None
 
-    melhores_estados, melhor_peso = branch_and_bound(G, vertices_ordenados, is_lower_bound, is_upper_bound)
+    if not atribuicao_gulosa:
+        #return BEST_STATES, BEST_WEIGHT
+        melhores_estados, melhor_peso = branch_and_bound(G, vertices_ordenados, is_lower_bound, is_upper_bound)
+    else:
+        #return current_weight, estados_guloso
+        melhores_estados, melhor_peso = atribuicao_direta_gulosa(G, vertices_ordenados)
 
     # Verificação final só é possível se houver um estado (o guloso inicializa, mas o B&B puro pode não)
     if melhores_estados:
@@ -1030,82 +1045,8 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
                         vertices_selecionados)
 
     # 6. Plotagem do Grafo
-    if BEST_STATES:  # Só plota se tiver um resultado válido
-        plotar_grafico(G, BEST_STATES, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
-
-
-# ======================================================================
-# Dominação por atribuição direta - Estratégia gulosa
-# ======================================================================
-
-def dominacao_por_atribuicao_direta(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_upper_bound: bool):
-    """
-        Função que realiza a atribuição direta (gulosa) sem aplicação de heurística
-        Entrada:
-            Grafo ordenado de forma decrescente pelo número de vertices.
-        Funcionamento:
-            Caso o vértice não esteja atribuído
-            1º: Atribui o valor 2 ao vértice atual
-            2ª: Atribui o valor 1 ao primeiro vértice conectado
-            3ª: atribui 0  aos demais vértices conectados
-
-    """
-    print("---------------------------------------------------------")
-    print(f"Iniciando processamento ({tecnica}) para: {arquivo}")
-    print("---------------------------------------------------------")
-
-    # 1. Carregamento e Ordenação do Grafo
-    _, extensao = os.path.splitext(arquivo)
-    local_arquivo = pasta + arquivo
-
-    # Chamando importar_base0 para arquivos que são 0-based
-    G, V, vertices_ordenados = importar_base0(local_arquivo)
-
-    # 2. PRÉ-PROCESSAMENTO: VERIFICAÇÃO DE VÉRTICES ISOLADOS
-    if vertices_isolados(G):
-        # Levanta exceção, pois a DRT não é possível (Peso infinito)
-        raise ValueError(
-            "O grafo é inválido para Dominação Romana Total: Contém vértices isolados (grau 0). "
-            "A DRT não pode ser formada."
-        )
-
-    if V == 0:
-        print("Erro: Grafo não carregado ou vazio.")
-        return
-
-    # 3. Execução e Medição de Tempo
-    start_time = time.perf_counter()
-
-    # REINICIALIZAÇÃO
-    global BEST_WEIGHT
-    global BEST_STATES
-    BEST_WEIGHT = float('inf')  # Reset para o B&B começar do zero
-    BEST_STATES = None
-
-    melhores_estados, melhor_peso = upper_bound_guloso(G, vertices_ordenados)
-
-    # A validação final verifica o melhor estado encontrado.
-    if not validar_solucao_final(G, melhores_estados):
-        return
-
-    # Atualiza as globais para a plotagem
-    BEST_WEIGHT = melhor_peso
-    BEST_STATES = melhores_estados
-
-    # 3. Continuação da Execução e Medição de Tempo
-    end_time = time.perf_counter()
-    tempo_total = end_time - start_time
-
-    # 4. Impressão do resultado
-    vertices_selecionados = impressao_resultado(melhores_estados, melhor_peso, tempo_total)
-
-    # 5. Adiciona o resultado para uma lista de exportação
-    adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, melhor_peso, round(tempo_total, 2),
-                        vertices_selecionados)
-
-    # 6. Plotagem do Grafo
-    plotar_grafico(G, BEST_STATES, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
-
+    if melhores_estados:  # Só plota se tiver um resultado válido
+        plotar_grafico(G, melhores_estados, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
 
 # ======================================================================
 # EXECUÇÃO DO SCRIPT
@@ -1116,43 +1057,42 @@ pasta = "grafos\\"
 # Recuperação da lista de arquivos
 arquivos_encontrados = recuperar_lista_arquivos(pasta)
 if arquivos_encontrados:
-    print(f"✅ Arquivos encontrados em {pasta}:")
+    print(f"✅ Arquivos encontrados na pasta {pasta}:")
     # for arquivo in arquivos_encontrados:
     #    print(f"{arquivo}")
 else:
     print("❌ Não foram encontrados arquivos, ou a pasta não existe.")
 
-# Operação BB pura
+# Operação Atribuição direta
 for grafo in arquivos_encontrados:
-    dominacao('B&B', grafo, pasta, False, False)
+    dominacao('Atribuição direta gulosa', grafo, pasta, False, False, True)
 
-exportar_excel("resultado_bb.xls", "Resultado")
+exportar_excel("resultado_atribuicao.xls", "Resultado Atribuição")
 reinicializar_resultados()
 
 # Operação BB lower bound
 for grafo in arquivos_encontrados:
-    dominacao('B&B', grafo, pasta, True, False)
+    dominacao('B&B - lower bound', grafo, pasta, True, False, False)
 
 exportar_excel("resultado_bb_LB.xls", "Resultado LB")
 reinicializar_resultados()
 
 # Operação BB upper bound
 for grafo in arquivos_encontrados:
-    dominacao('B&B', grafo, pasta, False, True)
+    dominacao('B&B - upper bound', grafo, pasta, False, True, False)
 
 exportar_excel("resultado_bb_UB.xls", "Resultado UB")
 reinicializar_resultados()
 
 # Operação BB lower bound e upper bound
 for grafo in arquivos_encontrados:
-    dominacao('B&B', grafo, pasta, True, True)
+    dominacao('B&B - lower and upper bound', grafo, pasta, True, True,False)
 
 exportar_excel("resultado_bb_LB_UB.xls", "Resultado LB UB")
 reinicializar_resultados()
 
-# Operação Atribuição direta
+# Operação BB pura
 for grafo in arquivos_encontrados:
-    dominacao_por_atribuicao_direta('Atribuição', grafo, pasta, False, False)
+    dominacao('B&B', grafo, pasta, False, False, False)
 
-exportar_excel("resultado_atribuicao.xls", "Resultado Atribuição")
-reinicializar_resultados()
+exportar_excel("resultado_bb_puro.xls", "Resultado")
