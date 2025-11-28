@@ -22,7 +22,7 @@ global RESULTADOS
 RESULTADOS: List[Tuple[str, bool, bool, str, int, float]] = []
 # List[Tuple[técnica, nome_grafo, peso, tempo]]
 global BRANCHING_ORDER
-BRANCHING_ORDER = [2, 1, 0]  # Heurística de ramificação: Prioriza atribuições mais promissoras (2, depois 1, depois 0)
+BRANCHING_ORDER = [0, 1, 2]  # Heurística de ramificação: Prioriza atribuições mais promissoras (2, depois 1, depois 0)
 
 
 # ======================================================================
@@ -30,7 +30,7 @@ BRANCHING_ORDER = [2, 1, 0]  # Heurística de ramificação: Prioriza atribuiç�
 # ======================================================================
 
 def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: int, arquivo: str, tecnica: str,
-                   is_lower_bound: bool, is_upper_bound: bool):
+                   is_lower_bound: bool, is_upper_bound: bool, pasta: str):
     """
     Gera uma imagem do grafo destacando a solução de Dominação Romana Total (DRT).
 
@@ -49,7 +49,7 @@ def plotar_grafico(G: Dict[int, Set[int]], states: List[Optional[int]], peso: in
     """
 
     # Cria o caminho absoluto para o arquivo de imagem
-    output_dir = os.path.join(os.path.dirname(arquivo), r"imagens")
+    output_dir = os.path.join(os.path.dirname(arquivo), pasta)
     os.makedirs(output_dir, exist_ok=True)
 
     _, extensao = os.path.splitext(arquivo)
@@ -362,7 +362,7 @@ def exportar_excel(nome_arquivo, sheet_name: str):
     try:
         # 1. Cria o DataFrame do Pandas a partir da lista de tuplas global
         df = pd.DataFrame(RESULTADOS,
-                          columns=['Algoritmo', 'Com lower bound?', 'Com upper bound?', 'Grafo', 'Peso', 'Segundos',
+                          columns=['Algoritmo', 'Ordem', 'Com lower bound?', 'Com upper bound?', 'Grafo', 'Peso', 'Segundos',
                                    'Vértices com peso'])
 
         # 2. Exporta o DataFrame para o Excel
@@ -393,7 +393,7 @@ def adicionar_resultado(tecnica: str, is_lower_bound: bool, is_upper_bound: bool
 
     # Adiciona o novo resultado como uma tupla (nome, peso)
     RESULTADOS.append(
-        (tecnica, is_lower_bound, is_upper_bound, nome_grafo, peso_encontrado, tempo, vertices_selecionados))
+        (tecnica, BRANCHING_ORDER, is_lower_bound, is_upper_bound, nome_grafo, peso_encontrado, tempo, vertices_selecionados))
     # print(f"Resultado adicionado: Grafo '{nome_grafo}', Peso: {peso_encontrado}")
 
 
@@ -983,7 +983,7 @@ Tuple[
     return BEST_STATES, BEST_WEIGHT
 
 
-def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_upper_bound: bool, atribuicao_gulosa: bool):
+def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_upper_bound: bool, atribuicao_gulosa: bool, pastaImagens: str):
     """Função principal que gerencia o fluxo de execução, mede o tempo e apresenta os resultados."""
     print("---------------------------------------------------------")
     print(f"Iniciando processamento\n{tecnica}\nArquivo: {arquivo}")
@@ -1002,7 +1002,7 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
         estados_peso_zero = [0] * V
         # Levanta exceção, pois a DRT não é possível (Peso infinito)
         adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, 0, 0, [])
-        plotar_grafico(G, estados_peso_zero, 0, arquivo, tecnica, is_lower_bound, is_upper_bound)
+        plotar_grafico(G, estados_peso_zero, 0, arquivo, tecnica, is_lower_bound, is_upper_bound, pastaImagens)
         print("O grafo contém vértices isolados e não pode ser dominado")
         return
 
@@ -1045,13 +1045,19 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
                         vertices_selecionados)
 
     # 6. Plotagem do Grafo
-    plotar_grafico(G, melhores_estados, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
+    plotar_grafico(G, melhores_estados, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound, pastaImagens)
 
 # ======================================================================
 # EXECUÇÃO DO SCRIPT
 # ======================================================================
 
+"""
+    Observar a ordem da variável BRANCHING_ORDER
+"""
 pasta = "grafos\\"
+pastaImagens = "imagens012"
+arquivo = "resultado012.xls"
+planilha = "Resultado012"
 
 # Recuperação da lista de arquivos
 arquivos_encontrados = recuperar_lista_arquivos(pasta)
@@ -1061,47 +1067,11 @@ if arquivos_encontrados:
     #    print(f"{arquivo}")
 else:
     print("❌ Não foram encontrados arquivos, ou a pasta não existe.")
-"""
-# Operação Atribuição direta
+
 for grafo in arquivos_encontrados:
-    dominacao('Atribuição direta gulosa', grafo, pasta, False, False, True)
-
-exportar_excel("resultado_atribuicao.xls", "Resultado Atribuição")
-reinicializar_resultados()
-
-# Operação BB lower bound
-for grafo in arquivos_encontrados:
-    dominacao('B&B - lower bound', grafo, pasta, True, False, False)
-
-exportar_excel("resultado_bb_LB.xls", "Resultado LB")
-reinicializar_resultados()
-
-# Operação BB upper bound
-for grafo in arquivos_encontrados:
-    dominacao('B&B - upper bound', grafo, pasta, False, True, False)
-
-exportar_excel("resultado_bb_UB.xls", "Resultado UB")
-reinicializar_resultados()
-
-# Operação BB lower bound e upper bound
-for grafo in arquivos_encontrados:
-    dominacao('B&B - lower and upper bound', grafo, pasta, True, True,False)
-
-exportar_excel("resultado_bb_LB_UB.xls", "Resultado LB UB")
-reinicializar_resultados()
-
-# Operação BB pura
-for grafo in arquivos_encontrados:
-    dominacao('B&B', grafo, pasta, False, False, False)
-
-exportar_excel("resultado_bb_puro.xls", "Resultado")
-"""
-# Operação Atribuição direta
-for grafo in arquivos_encontrados:
-    dominacao('Atribuição direta gulosa', grafo, pasta, False, False, True)
-    dominacao('B&B - upper bound', grafo, pasta, False, True, False)
-    dominacao('B&B - lower and upper bound', grafo, pasta, True, True, False)
-    dominacao('B&B - lower bound', grafo, pasta, True, False, False)
-    dominacao('B&B', grafo, pasta, False, False, False)
-
-exportar_excel("resultado012.xls", "Resultado")
+    dominacao('Atribuição direta gulosa', grafo, pasta, False, False, True, pastaImagens)
+    dominacao('B&B - upper bound', grafo, pasta, False, True, False, pastaImagens)
+    dominacao('B&B - lower and upper bound', grafo, pasta, True, True, False, pastaImagens)
+    dominacao('B&B - lower bound', grafo, pasta, True, False, False, pastaImagens)
+    dominacao('B&B', grafo, pasta, False, False, False, pastaImagens)
+    exportar_excel(arquivo, planilha)

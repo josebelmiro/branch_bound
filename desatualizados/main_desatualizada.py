@@ -9,7 +9,7 @@ sys.setrecursionlimit(1200) # Importação para vetores com mais de 1000 posiç�
 """
     Plota um grafo com o valor dos vértices e guarnições
 """
-def plotar_grafo(grafo, atribuicoes, filename=r"imagens\grafo.png"):
+def plotar_grafo(grafo, atribuicoes, filename=r"imagens210\grafo.png"):
     G = nx.Graph()
     n = len(grafo)
     G.add_nodes_from(range(n))
