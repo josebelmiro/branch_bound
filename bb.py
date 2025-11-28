@@ -403,7 +403,7 @@ def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
     """
     if melhores_estados is None:
         print("\n❌ Solução não encontrada ou grafo inviável (o B&B pode ter sido parado cedo).")
-        print(f"Tempo de Execução: {tempo_total:.2f} segundos")
+        print(f"Tempo de Execução: {tempo_total:.6f} segundos")
         return []
 
     print("DOMINAÇÃO ROMANA TOTAL")
@@ -427,7 +427,7 @@ def impressao_resultado(melhores_estados, melhor_peso, tempo_total):
         print("Nenhum vértice com peso 1 ou 2 encontrado. (Solução W=0 ou erro)")
 
     print("---------------------------------------------------------")
-    print(f"Tempo de execução: {tempo_total:.2f} segundos")
+    print(f"Tempo de execução: {tempo_total:.6f} segundos")
     print("---------------------------------------------------------")
 
     return vertices_selecionados
@@ -929,7 +929,7 @@ def bb_recursive(G: Dict[int, Set[int]],
 
     # A ordem de ramificação (2, 1, 0) é uma heurística para encontrar bons bounds
     # mais rapidamente, priorizando pesos mais altos.
-    BRANCHING_ORDER = 0, 1, 2
+
     for value in BRANCHING_ORDER:
         new_estados = list(estados)
         new_estados[u_index] = value
@@ -1026,27 +1026,26 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
         #return current_weight, estados_guloso
         melhores_estados, melhor_peso = atribuicao_direta_gulosa(G, vertices_ordenados)
 
-    # Verificação final só é possível se houver um estado (o guloso inicializa, mas o B&B puro pode não)
-    if melhores_estados:
-        # A validação final verifica o melhor estado encontrado.
-        if not validar_solucao_final(G, melhores_estados):
-            # Se a solução for inválida, é um erro no B&B, e não deve prosseguir
-            return
-
     # 3. Continuação da Execução e Medição de Tempo
     end_time = time.perf_counter()
     tempo_total = end_time - start_time
+
+    # A validação final verifica o melhor estado encontrado.
+    #Desnecessário porque bb_recursive já realiza essa função.
+    #if not validar_solucao_final(G, melhores_estados):
+        # Se a solução for inválida, é um erro no B&B, e não deve prosseguir
+        #print("Erro: Grafo não carregado ou vazio.")
+        # return
 
     # 4. Impressão do resultado
     vertices_selecionados = impressao_resultado(melhores_estados, melhor_peso, tempo_total)
 
     # 5. Adiciona o resultado para uma lista de exportação
-    adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, melhor_peso, round(tempo_total, 2),
+    adicionar_resultado(tecnica, is_lower_bound, is_upper_bound, arquivo, melhor_peso, round(tempo_total, 6),
                         vertices_selecionados)
 
     # 6. Plotagem do Grafo
-    if melhores_estados:  # Só plota se tiver um resultado válido
-        plotar_grafico(G, melhores_estados, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
+    plotar_grafico(G, melhores_estados, melhor_peso, arquivo, tecnica, is_lower_bound, is_upper_bound)
 
 # ======================================================================
 # EXECUÇÃO DO SCRIPT
@@ -1062,7 +1061,7 @@ if arquivos_encontrados:
     #    print(f"{arquivo}")
 else:
     print("❌ Não foram encontrados arquivos, ou a pasta não existe.")
-
+"""
 # Operação Atribuição direta
 for grafo in arquivos_encontrados:
     dominacao('Atribuição direta gulosa', grafo, pasta, False, False, True)
@@ -1096,3 +1095,13 @@ for grafo in arquivos_encontrados:
     dominacao('B&B', grafo, pasta, False, False, False)
 
 exportar_excel("resultado_bb_puro.xls", "Resultado")
+"""
+# Operação Atribuição direta
+for grafo in arquivos_encontrados:
+    dominacao('Atribuição direta gulosa', grafo, pasta, False, False, True)
+    dominacao('B&B - upper bound', grafo, pasta, False, True, False)
+    dominacao('B&B - lower and upper bound', grafo, pasta, True, True, False)
+    dominacao('B&B - lower bound', grafo, pasta, True, False, False)
+    dominacao('B&B', grafo, pasta, False, False, False)
+
+exportar_excel("resultado012.xls", "Resultado")
