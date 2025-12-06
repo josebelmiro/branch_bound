@@ -1055,9 +1055,9 @@ def dominacao(tecnica: str, arquivo: str, pasta: str, is_lower_bound: bool, is_u
     Observar a ordem da variável BRANCHING_ORDER
 """
 pasta = "grafos\\"
-pastaImagens = "imagens012"
-arquivo = "resultado012.xls"
-planilha = "Resultado012"
+pastaImagens = "imagens"
+arquivo = "resultado.xls"
+planilha = "Resultado"
 
 # Recuperação da lista de arquivos
 arquivos_encontrados = recuperar_lista_arquivos(pasta)
